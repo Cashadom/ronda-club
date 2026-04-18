@@ -1,0 +1,62 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Users ──────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Anyone authenticated can read public profiles
+      allow read: if request.auth != null;
+
+      // Only the user themselves can create/update their own profile
+      // trust_score is only writable by server (Cloud Functions)
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && !('trust_score' in request.resource.data);
+
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && !('trust_score' in request.resource.data);
+
+      // Only user can delete their own account
+      allow delete: if request.auth != null
+        && request.auth.uid == userId;
+    }
+
+    // ── Events ─────────────────────────────────────────────────────────────
+    match /events/{eventId} {
+      // Anyone can read events
+      allow read: if true;
+
+      // Only authenticated users can create events
+      // But event is actually created by Cloud Function after payment
+      // This allows direct creation in development
+      allow create: if request.auth != null
+        && request.resource.data.host_id == request.auth.uid;
+
+      // Only host can update (e.g. mark completed)
+      // participants_count is only updated by Cloud Function
+      allow update: if request.auth != null
+        && resource.data.host_id == request.auth.uid
+        && !('participants_count' in request.resource.data);
+
+      allow delete: if false; // Never delete events — mark cancelled instead
+    }
+
+    // ── Participants ────────────────────────────────────────────────────────
+    match /participants/{participantId} {
+      // User can read their own participant records
+      allow read: if request.auth != null
+        && resource.data.user_id == request.auth.uid;
+
+      // Event host can read all participants for their event
+      allow read: if request.auth != null
+        && exists(/databases/$(database)/documents/events/$(resource.data.event_id))
+        && get(/databases/$(database)/documents/events/$(resource.data.event_id)).data.host_id == request.auth.uid;
+
+      // Participants are created ONLY by Cloud Function (server)
+      // No client writes allowed
+      allow create, update, delete: if false;
+    }
+  }
+}

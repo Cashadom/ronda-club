@@ -1,0 +1,27 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+
+export default function HostSuccessPage() {
+  const [data, setData] = useState(null)
+
+  useEffect(() => {
+    const raw = localStorage.getItem('pendingHostEvent')
+    if (raw) {
+      setData(JSON.parse(raw))
+    }
+  }, [])
+
+  return (
+    <div style={{ maxWidth: 480, margin: '40px auto' }}>
+      <h1>Payment successful 🎉</h1>
+      <p>Your meetup is being created.</p>
+
+      {data && (
+        <pre style={{ whiteSpace: 'pre-wrap', marginTop: '20px' }}>
+          {JSON.stringify(data, null, 2)}
+        </pre>
+      )}
+    </div>
+  )
+}
