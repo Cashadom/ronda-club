@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { onAuthChange } from '@/lib/auth'
 import { getUserProfile } from '@/lib/users'
@@ -7,7 +7,8 @@ import CreateEventForm from '@/components/events/CreateEventForm'
 import { Container } from '@/components/ui/index'
 import Link from 'next/link'
 
-export default function CreatePage() {
+// Composant interne qui utilise useSearchParams
+function CreatePageContent() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const [user,    setUser]    = useState(undefined)
@@ -110,5 +111,20 @@ export default function CreatePage() {
         </div>
       </Container>
     </div>
+  )
+}
+
+// Export principal avec Suspense
+export default function CreatePage() {
+  return (
+    <Suspense fallback={
+      <div style={{ paddingTop: '120px', textAlign: 'center' }}>
+        <div style={{ width: 32, height: 32, border: '3px solid var(--coral)',
+          borderTopColor: 'transparent', borderRadius: '50%',
+          animation: 'spin 0.7s linear infinite', margin: '0 auto' }} />
+      </div>
+    }>
+      <CreatePageContent />
+    </Suspense>
   )
 }

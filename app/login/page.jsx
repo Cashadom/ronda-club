@@ -1,9 +1,11 @@
 'use client'
+import { Suspense } from 'react'
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signInWithGoogle, onAuthChange } from '@/lib/auth'
 
-export default function LoginPage() {
+// Composant interne qui utilise useSearchParams
+function LoginContent() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const redirect     = searchParams.get('redirect') || '/events'
@@ -39,7 +41,6 @@ export default function LoginPage() {
       background:     '#fff',
       padding:        '20px',
     }}>
-
       {/* Logo */}
       <div style={{
         fontFamily:   'var(--font-display)',
@@ -151,5 +152,20 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+// Export principal avec Suspense
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ paddingTop: '120px', textAlign: 'center' }}>
+        <div style={{ width: 32, height: 32, border: '3px solid var(--coral)',
+          borderTopColor: 'transparent', borderRadius: '50%',
+          animation: 'spin 0.7s linear infinite', margin: '0 auto' }} />
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }
