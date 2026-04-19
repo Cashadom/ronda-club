@@ -1,9 +1,15 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { fetchUpcomingEventsGlobal } from '@/lib/events'
 
-// Définir MEETUP_TYPES directement dans le fichier pour éviter l'erreur d'import
+// Import dynamique de la mini carte
+const MiniMap = dynamic(() => import('@/components/events/MapComponent'), {
+  ssr: false,
+  loading: () => <div style={{ height: '100px', background: '#f0f0f0', borderRadius: '12px' }} />
+})
+
 const MEETUP_TYPES = [
   { value: 'drinks',   label: 'Drinks',         emoji: '🍻' },
   { value: 'coffee',   label: 'Coffee',          emoji: '☕' },
@@ -20,9 +26,8 @@ export default function UpcomingMeetups() {
   useEffect(() => {
     async function loadMeetups() {
       try {
-        // 🔥 Récupère 4 events depuis la collection 'events'
         const data = await fetchUpcomingEventsGlobal(4)
-        console.log('📅 Events loaded:', data.length) // Debug temporaire
+        console.log('📅 Events loaded:', data.length)
         setMeetups(data)
       } catch (error) {
         console.error('Error loading events:', error)
@@ -48,7 +53,6 @@ export default function UpcomingMeetups() {
     )
   }
 
-  // 🔥 Affiche un message si aucun event (au lieu de return null)
   if (meetups.length === 0) {
     return (
       <section style={{ padding: '80px 5%', background: '#fff' }}>
@@ -106,17 +110,20 @@ export default function UpcomingMeetups() {
             const city = meetup.city || meetup.location || ''
             const place = meetup.location_name || ''
             
-            // Participants normalisés
-            const participants = meetup.participants ?? meetup.participants_count ?? 0
-            const limit = meetup.participantsLimit ?? meetup.capacity_max ?? 9
+            const participants = meetup.participants_count ?? 0
+            const limit = meetup.capacity_max ?? 9
             
-            // Date normalisée
-            const rawDate = meetup.time || meetup.dateTime
+            const rawDate = meetup.time
             const meetupDate = rawDate?.toDate ? rawDate.toDate() : new Date(rawDate)
             const isValidDate = meetupDate instanceof Date && !isNaN(meetupDate.getTime())
             
-            // Prix normalisé
             const price = meetup.price ?? 2
+            
+            // 🗺️ Vérifier les coordonnées pour la carte
+            const hasCoordinates = meetup.coordinates?.lat && meetup.coordinates?.lng
+            const mapCenter = hasCoordinates 
+              ? [Number(meetup.coordinates.lat), Number(meetup.coordinates.lng)]
+              : null
             
             return (
               <Link
@@ -126,24 +133,27 @@ export default function UpcomingMeetups() {
                   textDecoration: 'none',
                   color: 'inherit',
                   background: '#fff',
-                  border: '1px solid var(--border)',
-                  borderRadius: 20,
+                  border: '2px solid var(--coral-border)',
+                  borderRadius: 24,
                   padding: 20,
-                  boxShadow: 'var(--shadow-sm)',
-                  transition: 'all 0.2s',
+                  boxShadow: '0 4px 12px rgba(255,107,81,0.08)',
+                  transition: 'all 0.25s ease',
+                  display: 'block',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-4px)'
-                  e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.1)'
+                  e.currentTarget.style.transform = 'translateY(-6px)'
+                  e.currentTarget.style.boxShadow = '0 16px 28px rgba(255,107,81,0.15)'
+                  e.currentTarget.style.borderColor = 'var(--coral)'
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(255,107,81,0.08)'
+                  e.currentTarget.style.borderColor = 'var(--coral-border)'
                 }}
               >
                 <div style={{
                   display: 'inline-block',
-                  padding: '4px 10px',
+                  padding: '4px 12px',
                   borderRadius: 999,
                   background: 'var(--coral-pale)',
                   color: 'var(--coral)',
@@ -158,27 +168,71 @@ export default function UpcomingMeetups() {
                 <h3 style={{
                   fontFamily: 'var(--font-display)',
                   fontSize: '1.2rem',
-                  marginBottom: 8,
-                  color: 'var(--text)'
+                  marginBottom: 12,
+                  color: 'var(--text)',
+                  lineHeight: 1.3
                 }}>
-                  {meetup.title || `${meetupType} in ${city}`}
+                  {meetup.meetingPoint || meetup.title || `${meetupType} in ${city}`}
                 </h3>
 
-                <p style={{ color: 'var(--text-muted)', marginBottom: 6, fontSize: '0.9rem' }}>
-                  📍 {city}{place ? ` • ${place}` : ''}
+                {/* 🗺️ MINI CARTE */}
+                {mapCenter && (
+                  <div style={{
+                    marginBottom: 16,
+                    borderRadius: 16,
+                    overflow: 'hidden',
+                    height: '110px',
+                    border: '1px solid var(--coral-border)'
+                  }}>
+                    <MiniMap 
+                      center={mapCenter}
+                      location={meetup.meetingPoint || place || city}
+                      height="110px"
+                    />
+                  </div>
+                )}
+
+                <p style={{ color: 'var(--text-muted)', marginBottom: 6, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>📍</span> {city}{place ? ` • ${place}` : ''}
                 </p>
 
-                <p style={{ color: 'var(--text-muted)', marginBottom: 8, fontSize: '0.85rem' }}>
-                  🕒 {isValidDate ? meetupDate.toLocaleString() : 'Date TBD'}
+                <p style={{ color: 'var(--text-muted)', marginBottom: 8, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🕒</span> {isValidDate ? meetupDate.toLocaleString() : 'Date TBD'}
                 </p>
 
-                <p style={{ color: 'var(--text-muted)', marginBottom: 16, fontSize: '0.85rem' }}>
-                  👥 {participants} / {limit} participants
+                <p style={{ color: 'var(--text-muted)', marginBottom: 20, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>👥</span> {participants} / {limit} participants
                 </p>
 
-                <p style={{ fontWeight: 600, color: 'var(--coral)', fontSize: '0.9rem' }}>
-                  Join ${price} →
-                </p>
+                {/* 🔥 BOUTON CORAIL TEXTE BLANC */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  paddingTop: 12,
+                  borderTop: '1px solid var(--coral-border)'
+                }}>
+                  <span style={{
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                    color: 'var(--coral)'
+                  }}>
+                    ${price}
+                  </span>
+                  <span style={{
+                    background: 'var(--coral)',
+                    color: '#fff',
+                    padding: '8px 20px',
+                    borderRadius: 40,
+                    fontWeight: 600,
+                    fontSize: '0.85rem',
+                    transition: 'all 0.2s',
+                    cursor: 'pointer',
+                    display: 'inline-block'
+                  }}>
+                    Join ${price} →
+                  </span>
+                </div>
               </Link>
             )
           })}

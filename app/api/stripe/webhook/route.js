@@ -53,26 +53,65 @@ export async function POST(req) {
         const pendingData = pendingSnap.data()
         const eventData = JSON.parse(eventDataJson || '{}')
 
-        // 🔥 CHANGEMENT: meetups au lieu de events
+        // 🔥 CORRECTION: Convertir les coordonnées en nombres
+        let normalizedCoordinates = null
+        const rawCoords = pendingData.coordinates || eventData.coordinates
+        if (rawCoords && rawCoords.lat && rawCoords.lng) {
+          normalizedCoordinates = {
+            lat: Number(rawCoords.lat),      // force en number
+            lng: Number(rawCoords.lng),      // force en number
+            name: rawCoords.name || pendingData.city || ''
+          }
+          console.log('🗺️ Coordinates normalized:', normalizedCoordinates)
+        }
+
+        // 🔥 meetups au lieu de events
         const meetupRef = adminDb.collection('meetups').doc()
 
+        // 🔥 TOUS les champs sont maintenant transférés
         await meetupRef.set({
+          // Champs de base
           ...pendingData,
-          title: eventData.title || `${pendingData.type} in ${pendingData.city}`,
-          host_id: userId,  // garder host_id pour compatibilité
-
+          
+          // Titre et description
+          title: eventData.title || pendingData.title || `${pendingData.type} in ${pendingData.city}`,
+          description: pendingData.description || eventData.description || '',
+          
+          // Hôte
+          host_id: userId,
+          hostId: userId,  // Pour compatibilité
+          
+          // Lieu (NOUVEAUX CHAMPS)
+          city: pendingData.city || eventData.city || '',
+          meetingPoint: pendingData.meetingPoint || eventData.meetingPoint || '',
+          venue: pendingData.venue || eventData.venue || '',
+          location_name: pendingData.location_name || eventData.location_name || pendingData.meetingPoint || '',
+          
+          // 🔥 Coordonnées géographiques CORRIGÉES (avec nombres)
+          coordinates: normalizedCoordinates,
+          
+          // Capacités
+          capacity: Number(pendingData.capacity) || 9,
+          capacity_min: Number(pendingData.capacity_min) || Number(eventData.capacity_min) || 6,
+          capacity_max: Number(pendingData.capacity_max) || Number(eventData.capacity_max) || 9,
+          
+          // Participants
           participants_count: 0,
-          capacity_max: Number(pendingData.capacity) || 6,
-          capacity_min: 6,
-
+          seatsTaken: 0,
+          
+          // Type et statut
+          type: pendingData.type || eventData.type || 'outing',
           status: 'open',
           paymentStatus: 'paid',
           
+          // Stripe
           stripeSessionId: session.id,
           stripePaymentIntent: session.payment_intent,
           
-          publishedAt: adminFieldValue.serverTimestamp(),
+          // Timestamps
           timestamp: pendingData.createdAt || adminFieldValue.serverTimestamp(),
+          publishedAt: adminFieldValue.serverTimestamp(),
+          createdAt: pendingData.createdAt || adminFieldValue.serverTimestamp(),
           updatedAt: adminFieldValue.serverTimestamp(),
         })
 
@@ -82,14 +121,21 @@ export async function POST(req) {
           updatedAt: adminFieldValue.serverTimestamp(),
         })
 
-        console.log('🔥 MEETUP PUBLISHED:', meetupRef.id, '| Limit:', pendingData.capacity)
+        console.log('🔥 MEETUP PUBLISHED:', meetupRef.id, {
+          city: pendingData.city,
+          meetingPoint: pendingData.meetingPoint,
+          venue: pendingData.venue,
+          hasCoordinates: !!normalizedCoordinates,
+          coordinatesType: normalizedCoordinates ? typeof normalizedCoordinates.lat : 'none',
+          capacity_min: pendingData.capacity_min,
+          capacity_max: pendingData.capacity_max,
+        })
       }
 
       // 🔥 FLUX 2: JOIN_EVENT - réservation dans meetups
       if (checkoutType === 'join_event') {
         const { userId, eventId, userName } = metadata
 
-        // 🔥 CHANGEMENT: meetups au lieu de events
         const meetupRef = adminDb.collection('meetups').doc(eventId)
 
         await adminDb.runTransaction(async (tx) => {
@@ -100,7 +146,7 @@ export async function POST(req) {
           }
 
           const meetup = meetupSnap.data()
-          const meetupLimit = meetup.capacity_max || 9
+          const meetupLimit = meetup.capacity_max || meetup.capacity || 9
           const currentParticipants = meetup.participants_count || 0
 
           if (currentParticipants >= meetupLimit) {

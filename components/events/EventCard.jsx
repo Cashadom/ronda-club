@@ -2,9 +2,16 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { getEventType, formatEventTime, getSpotsLeft } from '@/lib/utils'
 import { EVENT_STATUS } from '@/lib/events'
 import { getUserProfile } from '@/lib/users'
+
+// Import dynamique de la mini carte
+const MiniMap = dynamic(() => import('@/components/events/MiniMap'), {
+  ssr: false,
+  loading: () => <div style={{ height: '100px', background: '#f0f0f0', borderRadius: '12px' }} />
+})
 
 const TAG_COLORS = {
   drinks:   { bg: '#FEE8E5', color: '#C43A22' },
@@ -22,13 +29,19 @@ export default function EventCard({ event }) {
   // Normalisation des champs
   const hostId = event.hostId || event.host_id
   const joinedCount = event.participants ?? event.participants_count ?? 0
-  const limit = event.participantsLimit ?? event.capacity ?? 0
+  const limit = event.participantsLimit ?? event.capacity_max ?? event.capacity ?? 0
   
   const type    = getEventType(event.type)
   const tagClr  = TAG_COLORS[event.type] || TAG_COLORS.hangout
   const spots   = getSpotsLeft(event)
   const isFull  = joinedCount >= limit || event.status === EVENT_STATUS.FULL
   const time    = formatEventTime(event.time)
+
+  // Vérifier si on a des coordonnées
+  const hasCoordinates = event.coordinates?.lat && event.coordinates?.lng
+  const mapCenter = hasCoordinates 
+    ? [parseFloat(event.coordinates.lat), parseFloat(event.coordinates.lng)]
+    : null
 
   // Charger le profil de l'organisateur
   useEffect(() => {
@@ -88,10 +101,10 @@ export default function EventCard({ event }) {
         marginBottom: '8px',
         lineHeight:   1.3,
       }}>
-        {event.title || event.description || `${type.label} in ${event.city}`}
+        {event.title || event.meetingPoint || event.location_name || `${type.label} in ${event.city}`}
       </p>
 
-      {/* 🔥 NOUVEAU: Hosted by (lien cliquable) */}
+      {/* Hosted by */}
       {host && (
         <Link
           href={`/users/${hostId}`}
@@ -124,9 +137,26 @@ export default function EventCard({ event }) {
         </Link>
       )}
 
+      {/* 🗺️ MINI CARTE (sur PC à droite, sur mobile en dessous) */}
+      {mapCenter && (
+        <div style={{
+          marginBottom: '16px',
+          borderRadius: '12px',
+          overflow: 'hidden',
+          border: '1px solid var(--border)',
+        }}>
+          <MiniMap 
+            center={mapCenter}
+            location={event.meetingPoint || event.location_name}
+            height="100px"
+          />
+        </div>
+      )}
+
       {/* Meta */}
       <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '16px' }}>
-        📍 {event.location_name}<br />
+        📍 {event.city}<br />
+        📍 {event.meetingPoint || event.location_name}<br />
         ⏰ {time}
       </p>
 

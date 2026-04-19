@@ -78,7 +78,7 @@ export function JoinButton({ event, userId, alreadyJoined, isFull }) {
         textAlign: 'center',
         marginTop: '8px',
       }}>
-        $2 commitment fee · No refunds · Shows you're serious
+        $2 commitment fee · Refunded if meetup cancelled · Shows you're serious
       </p>
     </div>
   )

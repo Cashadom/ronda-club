@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { getEventType, formatEventTime, getSpotsLeft } from '@/lib/utils'
 import { EVENT_STATUS, getEventParticipants, markAttendance, CAPACITY_MIN } from '@/lib/events'
 import { getUserProfile } from '@/lib/users'
@@ -8,20 +9,39 @@ import { updateTrustScore, TRUST_DELTA } from '@/lib/trust'
 import { JoinButton } from './JoinButton'
 import AvatarStack from './AvatarStack'
 import TrustBadge from './TrustBadge'
-import { getWeatherForLocation } from '@/lib/weather'  // ← Ajout
+import { getWeatherForLocation } from '@/lib/weather'
+
+// Import dynamique de la carte pour éviter les erreurs SSR
+const MapComponent = dynamic(() => import('@/components/events/MapComponent'), {
+  ssr: false,
+  loading: () => (
+    <div style={{
+      height: '200px',
+      background: '#f8fafc',
+      borderRadius: '16px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '0.85rem',
+      color: 'var(--text-muted)'
+    }}>
+      🗺️ Loading map...
+    </div>
+  )
+})
 
 export default function EventDetail({ event, currentUser }) {
   const [participants, setParticipants] = useState([])
   const [host, setHost]                 = useState(null)
   const [alreadyJoined, setAlreadyJoined] = useState(false)
   const [markingDone, setMarkingDone]   = useState(false)
-  const [weather, setWeather]           = useState(null)  // ← Ajout
-  const [weatherLoading, setWeatherLoading] = useState(false)  // ← Ajout
+  const [weather, setWeather]           = useState(null)
+  const [weatherLoading, setWeatherLoading] = useState(false)
 
-  // 🔥 CORRECTION 1: Normalisation des champs (backend → front)
+  // Normalisation des champs (backend → front)
   const hostId = event.hostId || event.host_id
   const joinedCount = event.participants ?? event.participants_count ?? 0
-  const limit = event.participantsLimit ?? event.capacity ?? 0
+  const limit = event.participantsLimit ?? event.capacity_max ?? event.capacity ?? 0
   
   const type = getEventType(event.type)
   const isFull = joinedCount >= limit || event.status === EVENT_STATUS.FULL
@@ -29,7 +49,7 @@ export default function EventDetail({ event, currentUser }) {
   const spotsLeft = getSpotsLeft({ ...event, participants: joinedCount, participantsLimit: limit })
   const confirmed = joinedCount >= CAPACITY_MIN
 
-  // 🔥 Ajout: Météo
+  // Météo
   useEffect(() => {
     async function loadWeather() {
       if (event.coordinates?.lat && event.coordinates?.lng) {
@@ -89,6 +109,18 @@ export default function EventDetail({ event, currentUser }) {
     await updateTrustScore(userId, attended ? TRUST_DELTA.ATTENDED : TRUST_DELTA.NO_SHOW)
   }
 
+  // Vérifier si on a des coordonnées pour la carte
+  const hasCoordinates = event.coordinates?.lat && event.coordinates?.lng
+  const mapCenter = hasCoordinates 
+    ? [parseFloat(event.coordinates.lat), parseFloat(event.coordinates.lng)]
+    : null
+
+  // Debug logs
+  console.log('🔍 EVENT COMPLETE:', event)
+  console.log('🔍 COORDINATES RAW:', event.coordinates)
+  console.log('🔍 hasCoordinates:', hasCoordinates)
+  console.log('🔍 mapCenter:', mapCenter)
+
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '0 5%' }}>
       {/* Type + status */}
@@ -129,7 +161,7 @@ export default function EventDetail({ event, currentUser }) {
         marginBottom: '8px',
         lineHeight: 1.1,
       }}>
-        {event.title || event.description || `${type.label} in ${event.city}`}
+        {event.title || event.meetingPoint || event.location_name || `${type.label} in ${event.city}`}
       </h1>
 
       {/* Created by */}
@@ -196,11 +228,10 @@ export default function EventDetail({ event, currentUser }) {
         marginBottom: '24px',
       }}>
         {[
-          ['📍', event.location_name],
+          ['📍', event.location_name || event.meetingPoint || event.city],
           ['⏰', formatEventTime(event.time)],
           ['⏱', `Starts in ${countdown}`],
           ['👥', `${joinedCount} joined · ${spotsLeft}`],
-          // 🔥 Météo (si disponible)
           ...(weather && !weatherLoading ? [['🌡️', `${weather.temp}°C · ${weather.description}`]] : []),
           ...(weatherLoading ? [['🌡️', 'Loading weather...']] : []),
         ].map(([icon, text]) => (
@@ -212,6 +243,33 @@ export default function EventDetail({ event, currentUser }) {
             <span style={{ color: 'var(--text-mid)' }}>{text}</span>
           </div>
         ))}
+
+        {/* 🗺️ CARTE */}
+        {mapCenter && (
+          <div style={{ marginTop: '16px' }}>
+            <div style={{
+              borderRadius: '12px',
+              overflow: 'hidden',
+              border: '1px solid var(--border)'
+            }}>
+              <MapComponent 
+                center={mapCenter}
+                location={event.meetingPoint || event.location_name || event.city}
+                height="200px"
+              />
+            </div>
+            {event.meetingPoint && (
+              <p style={{
+                fontSize: '0.7rem',
+                color: 'var(--text-muted)',
+                marginTop: '8px',
+                textAlign: 'center'
+              }}>
+                📍 Exact meeting point: {event.meetingPoint}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Participants */}
@@ -277,16 +335,29 @@ export default function EventDetail({ event, currentUser }) {
         </div>
       )}
 
-      {/* Reminder */}
-      <p style={{
-        fontSize: '0.8rem',
-        color: 'var(--text-muted)',
-        textAlign: 'center',
-        marginTop: '20px',
-        lineHeight: 1.6,
-      }}>
-        🙌 Bring cash for your own drinks/food · Be on time · Be yourself
-      </p>
+      {/* Refund policy - NOUVEAU TEXTE */}
+      <div style={{ marginTop: '24px', textAlign: 'center' }}>
+        <p style={{
+          fontSize: '0.75rem',
+          color: 'var(--text-muted)',
+          marginBottom: '8px',
+        }}>
+          💵 $2 commitment fee to reserve your spot.
+        </p>
+        <p style={{
+          fontSize: '0.75rem',
+          color: 'var(--text-muted)',
+          marginBottom: '8px',
+        }}>
+          🔄 Refunded if the meetup is cancelled or doesn't happen.
+        </p>
+        <p style={{
+          fontSize: '0.7rem',
+          color: 'var(--text-muted)',
+        }}>
+          🍽️ Food and drinks are paid separately at the venue.
+        </p>
+      </div>
     </div>
   )
 }
