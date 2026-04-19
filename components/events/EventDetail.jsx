@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { getEventType, formatEventTime, getSpotsLeft } from '@/lib/utils'
 import { EVENT_STATUS, getEventParticipants, markAttendance, CAPACITY_MIN } from '@/lib/events'
 import { getUserProfile } from '@/lib/users'
@@ -7,18 +8,44 @@ import { updateTrustScore, TRUST_DELTA } from '@/lib/trust'
 import { JoinButton } from './JoinButton'
 import AvatarStack from './AvatarStack'
 import TrustBadge from './TrustBadge'
+import { getWeatherForLocation } from '@/lib/weather'  // ← Ajout
 
 export default function EventDetail({ event, currentUser }) {
   const [participants, setParticipants] = useState([])
   const [host, setHost]                 = useState(null)
   const [alreadyJoined, setAlreadyJoined] = useState(false)
   const [markingDone, setMarkingDone]   = useState(false)
+  const [weather, setWeather]           = useState(null)  // ← Ajout
+  const [weatherLoading, setWeatherLoading] = useState(false)  // ← Ajout
 
-  const type     = getEventType(event.type)
-  const isFull   = event.status === EVENT_STATUS.FULL
-  const isHost   = currentUser?.uid === event.host_id
-  const spotsLeft = getSpotsLeft(event)
-  const confirmed = event.participants_count >= CAPACITY_MIN
+  // 🔥 CORRECTION 1: Normalisation des champs (backend → front)
+  const hostId = event.hostId || event.host_id
+  const joinedCount = event.participants ?? event.participants_count ?? 0
+  const limit = event.participantsLimit ?? event.capacity ?? 0
+  
+  const type = getEventType(event.type)
+  const isFull = joinedCount >= limit || event.status === EVENT_STATUS.FULL
+  const isHost = currentUser?.uid === hostId
+  const spotsLeft = getSpotsLeft({ ...event, participants: joinedCount, participantsLimit: limit })
+  const confirmed = joinedCount >= CAPACITY_MIN
+
+  // 🔥 Ajout: Météo
+  useEffect(() => {
+    async function loadWeather() {
+      if (event.coordinates?.lat && event.coordinates?.lng) {
+        setWeatherLoading(true)
+        try {
+          const weatherData = await getWeatherForLocation(event.coordinates.lat, event.coordinates.lng)
+          if (weatherData) setWeather(weatherData)
+        } catch (err) {
+          console.error('Weather fetch failed:', err)
+        } finally {
+          setWeatherLoading(false)
+        }
+      }
+    }
+    loadWeather()
+  }, [event.coordinates])
 
   // Countdown
   const [countdown, setCountdown] = useState('')
@@ -41,7 +68,6 @@ export default function EventDetail({ event, currentUser }) {
   useEffect(() => {
     async function load() {
       const parts = await getEventParticipants(event.id)
-      // Fetch user profiles for avatars
       const users = await Promise.all(
         parts.slice(0, 6).map(p => getUserProfile(p.user_id))
       )
@@ -51,11 +77,11 @@ export default function EventDetail({ event, currentUser }) {
         setAlreadyJoined(parts.some(p => p.user_id === currentUser.uid))
       }
 
-      const hostProfile = await getUserProfile(event.host_id)
+      const hostProfile = hostId ? await getUserProfile(hostId) : null
       setHost(hostProfile)
     }
     load()
-  }, [event.id, currentUser])
+  }, [event.id, currentUser, hostId])
 
   async function handleMarkAttendance(userId, attended) {
     setMarkingDone(true)
@@ -65,7 +91,6 @@ export default function EventDetail({ event, currentUser }) {
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '0 5%' }}>
-
       {/* Type + status */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '16px' }}>
         <span style={{
@@ -90,7 +115,7 @@ export default function EventDetail({ event, currentUser }) {
             fontSize: '0.72rem', color: 'var(--text-muted)',
             fontStyle: 'italic',
           }}>
-            Needs {CAPACITY_MIN - event.participants_count} more to confirm
+            Needs {CAPACITY_MIN - joinedCount} more to confirm
           </span>
         )}
       </div>
@@ -104,15 +129,45 @@ export default function EventDetail({ event, currentUser }) {
         marginBottom: '8px',
         lineHeight: 1.1,
       }}>
-        {event.description || `${type.label} in ${event.city}`}
+        {event.title || event.description || `${type.label} in ${event.city}`}
       </h1>
+
+      {/* Created by */}
+      {host && (
+        <div style={{ marginBottom: '20px' }}>
+          <Link 
+            href={`/users/${hostId}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              textDecoration: 'none',
+              background: 'var(--bg-soft)',
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-pill)',
+              fontSize: '0.8rem',
+            }}
+          >
+            <span style={{ fontSize: '0.9rem' }}>👤</span>
+            <span style={{ color: 'var(--text-mid)' }}>Created by</span>
+            <span style={{ fontWeight: 600, color: 'var(--text)' }}>{host.name}</span>
+            <TrustBadge score={host.trust_score || 0} showLabel={false} />
+          </Link>
+        </div>
+      )}
 
       {/* Host info */}
       {host && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '10px',
-          marginBottom: '24px',
-        }}>
+        <Link 
+          href={`/users/${hostId}`}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            marginBottom: '24px',
+            textDecoration: 'none',
+          }}
+        >
           <div style={{
             width: 36, height: 36, borderRadius: '50%',
             background: 'var(--coral)',
@@ -129,7 +184,7 @@ export default function EventDetail({ event, currentUser }) {
             </span>
           </div>
           <TrustBadge score={host.trust_score || 0} showLabel />
-        </div>
+        </Link>
       )}
 
       {/* Key info card */}
@@ -144,7 +199,10 @@ export default function EventDetail({ event, currentUser }) {
           ['📍', event.location_name],
           ['⏰', formatEventTime(event.time)],
           ['⏱', `Starts in ${countdown}`],
-          ['👥', `${event.participants_count} joined · ${spotsLeft}`],
+          ['👥', `${joinedCount} joined · ${spotsLeft}`],
+          // 🔥 Météo (si disponible)
+          ...(weather && !weatherLoading ? [['🌡️', `${weather.temp}°C · ${weather.description}`]] : []),
+          ...(weatherLoading ? [['🌡️', 'Loading weather...']] : []),
         ].map(([icon, text]) => (
           <div key={icon} style={{
             display: 'flex', gap: '12px', alignItems: 'flex-start',
@@ -163,7 +221,7 @@ export default function EventDetail({ event, currentUser }) {
             textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
             Who's coming
           </p>
-          <AvatarStack users={participants} count={event.participants_count} />
+          <AvatarStack users={participants} count={joinedCount} />
         </div>
       )}
 

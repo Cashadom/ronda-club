@@ -14,6 +14,7 @@ export function HostButton({ eventData, userId }) {
     setIsLoading(true)
 
     try {
+      // 🔥 TOUS les champs sont maintenant envoyés
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -21,13 +22,25 @@ export function HostButton({ eventData, userId }) {
           type: 'host',
           userId,
           eventData: {
+            // Champs obligatoires
             type: eventData.type || 'outing',
-            location_name: eventData.location_name || eventData.venueName || '',
             city: eventData.city || '',
+            meetingPoint: eventData.meetingPoint || '',        // 👈 NOUVEAU : point de rencontre
             time: eventData.time || eventData.startAt || '',
-            capacity: Number(eventData.capacity) || 6,
+            capacity: Number(eventData.capacity) || 9,
             description: eventData.description || '',
+            
+            // Champs optionnels
             title: eventData.title || '',
+            location_name: eventData.location_name || eventData.meetingPoint || eventData.venueName || '',
+            venue: eventData.venue || '',                       // 👈 NOUVEAU : établissement
+            
+            // Géolocalisation
+            coordinates: eventData.coordinates || null,         // 👈 NOUVEAU : { lat, lng, name }
+            
+            // Capacités min/max
+            capacity_min: Number(eventData.capacity_min) || 6,  // 👈 NOUVEAU
+            capacity_max: Number(eventData.capacity_max) || 9,  // 👈 NOUVEAU
           },
         }),
       })

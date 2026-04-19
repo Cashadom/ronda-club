@@ -34,7 +34,7 @@ export default function Navbar() {
           src="/logo.png"
           alt="Ronda"
           style={{
-            height: 157,
+            height: 177,
             cursor: 'pointer'
           }}
         />
@@ -58,7 +58,7 @@ export default function Navbar() {
               Host
             </Link>
             <Link href="/profile" style={{
-              width: 150, height: 148, borderRadius: '50%',
+              width: 34, height: 32, borderRadius: '50%',
               background: user.photoURL ? 'transparent' : 'var(--coral)',
               backgroundImage: user.photoURL ? `url(${user.photoURL})` : 'none',
               backgroundSize: 'cover',

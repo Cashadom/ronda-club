@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { fetchUpcomingMeetupsGlobal } from '@/lib/meetups'
+import { fetchUpcomingEventsGlobal } from '@/lib/events'
 
 // Définir MEETUP_TYPES directement dans le fichier pour éviter l'erreur d'import
 const MEETUP_TYPES = [
@@ -14,22 +14,19 @@ const MEETUP_TYPES = [
 ]
 
 export default function UpcomingMeetups() {
-  console.log('🔴 UpcomingMeetups component is rendering')
   const [meetups, setMeetups] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    console.log('🔵 useEffect running')
     async function loadMeetups() {
       try {
-        console.log('🟡 Loading meetups...')
-        const data = await fetchUpcomingMeetupsGlobal(3)
-        console.log('🟢 Meetups loaded:', data)
+        // 🔥 Récupère 4 events depuis la collection 'events'
+        const data = await fetchUpcomingEventsGlobal(4)
+        console.log('📅 Events loaded:', data.length) // Debug temporaire
         setMeetups(data)
       } catch (error) {
-        console.error('🔴 Error loading meetups:', error)
+        console.error('Error loading events:', error)
       } finally {
-        console.log('⚪ Setting loading to false')
         setLoading(false)
       }
     }
@@ -45,14 +42,33 @@ export default function UpcomingMeetups() {
     return (
       <section style={{ padding: '80px 5%', background: '#fff' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', textAlign: 'center' }}>
-          <p style={{ color: 'var(--text-muted)' }}>Loading meetups...</p>
+          <p style={{ color: 'var(--text-muted)' }}>Loading events...</p>
         </div>
       </section>
     )
   }
 
+  // 🔥 Affiche un message si aucun event (au lieu de return null)
   if (meetups.length === 0) {
-    return null
+    return (
+      <section style={{ padding: '80px 5%', background: '#fff' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', textAlign: 'center' }}>
+          <p style={{ color: 'var(--text-muted)' }}>No upcoming events yet. Be the first to create one!</p>
+          <Link href="/create" style={{
+            display: 'inline-block',
+            marginTop: 16,
+            padding: '10px 24px',
+            background: 'var(--coral)',
+            color: '#fff',
+            borderRadius: 40,
+            textDecoration: 'none',
+            fontWeight: 600
+          }}>
+            Create an event →
+          </Link>
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -85,12 +101,27 @@ export default function UpcomingMeetups() {
           gap: 20
         }}>
           {meetups.map(meetup => {
-            const meetupDate = meetup.time?.toDate ? meetup.time.toDate() : new Date(meetup.time)
+            // Normalisation des champs
+            const meetupType = meetup.type || meetup.category || 'hangout'
+            const city = meetup.city || meetup.location || ''
+            const place = meetup.location_name || ''
+            
+            // Participants normalisés
+            const participants = meetup.participants ?? meetup.participants_count ?? 0
+            const limit = meetup.participantsLimit ?? meetup.capacity_max ?? 9
+            
+            // Date normalisée
+            const rawDate = meetup.time || meetup.dateTime
+            const meetupDate = rawDate?.toDate ? rawDate.toDate() : new Date(rawDate)
+            const isValidDate = meetupDate instanceof Date && !isNaN(meetupDate.getTime())
+            
+            // Prix normalisé
+            const price = meetup.price ?? 2
             
             return (
               <Link
                 key={meetup.id}
-                href={`/meetups/${meetup.id}`}
+                href={`/events/${meetup.id}`}
                 style={{
                   textDecoration: 'none',
                   color: 'inherit',
@@ -121,7 +152,7 @@ export default function UpcomingMeetups() {
                   textTransform: 'uppercase',
                   marginBottom: 12
                 }}>
-                  {getMeetupTypeLabel(meetup.type)}
+                  {getMeetupTypeLabel(meetupType)}
                 </div>
 
                 <h3 style={{
@@ -130,23 +161,23 @@ export default function UpcomingMeetups() {
                   marginBottom: 8,
                   color: 'var(--text)'
                 }}>
-                  {meetup.title || `${meetup.type} in ${meetup.city}`}
+                  {meetup.title || `${meetupType} in ${city}`}
                 </h3>
 
                 <p style={{ color: 'var(--text-muted)', marginBottom: 6, fontSize: '0.9rem' }}>
-                  📍 {meetup.city} • {meetup.location_name}
+                  📍 {city}{place ? ` • ${place}` : ''}
                 </p>
 
                 <p style={{ color: 'var(--text-muted)', marginBottom: 8, fontSize: '0.85rem' }}>
-                  🕒 {meetupDate.toLocaleString()}
+                  🕒 {isValidDate ? meetupDate.toLocaleString() : 'Date TBD'}
                 </p>
 
                 <p style={{ color: 'var(--text-muted)', marginBottom: 16, fontSize: '0.85rem' }}>
-                  👥 {meetup.participants_count || 0} / {meetup.capacity_max || 9} participants
+                  👥 {participants} / {limit} participants
                 </p>
 
                 <p style={{ fontWeight: 600, color: 'var(--coral)', fontSize: '0.9rem' }}>
-                  Join for ${meetup.price || 2} →
+                  Join ${price} →
                 </p>
               </Link>
             )

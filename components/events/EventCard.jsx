@@ -1,7 +1,10 @@
 'use client'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { getEventType, formatEventTime, getSpotsLeft } from '@/lib/utils'
 import { EVENT_STATUS } from '@/lib/events'
+import { getUserProfile } from '@/lib/users'
 
 const TAG_COLORS = {
   drinks:   { bg: '#FEE8E5', color: '#C43A22' },
@@ -14,11 +17,29 @@ const TAG_COLORS = {
 
 export default function EventCard({ event }) {
   const router  = useRouter()
+  const [host, setHost] = useState(null)
+
+  // Normalisation des champs
+  const hostId = event.hostId || event.host_id
+  const joinedCount = event.participants ?? event.participants_count ?? 0
+  const limit = event.participantsLimit ?? event.capacity ?? 0
+  
   const type    = getEventType(event.type)
   const tagClr  = TAG_COLORS[event.type] || TAG_COLORS.hangout
   const spots   = getSpotsLeft(event)
-  const isFull  = event.status === EVENT_STATUS.FULL
+  const isFull  = joinedCount >= limit || event.status === EVENT_STATUS.FULL
   const time    = formatEventTime(event.time)
+
+  // Charger le profil de l'organisateur
+  useEffect(() => {
+    async function loadHost() {
+      if (hostId) {
+        const hostProfile = await getUserProfile(hostId)
+        setHost(hostProfile)
+      }
+    }
+    loadHost()
+  }, [hostId])
 
   return (
     <div
@@ -67,8 +88,41 @@ export default function EventCard({ event }) {
         marginBottom: '8px',
         lineHeight:   1.3,
       }}>
-        {event.description || `${type.label} in ${event.city}`}
+        {event.title || event.description || `${type.label} in ${event.city}`}
       </p>
+
+      {/* 🔥 NOUVEAU: Hosted by (lien cliquable) */}
+      {host && (
+        <Link
+          href={`/users/${hostId}`}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            textDecoration: 'none',
+            marginBottom: '12px',
+            fontSize: '0.7rem',
+            color: 'var(--text-mid)',
+          }}
+        >
+          <span style={{
+            width: 18, height: 18, borderRadius: '50%',
+            background: 'var(--coral)',
+            backgroundImage: host.photo_url ? `url(${host.photo_url})` : 'none',
+            backgroundSize: 'cover',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontSize: '0.65rem',
+            fontWeight: 700,
+          }}>
+            {!host.photo_url && host.name?.[0]}
+          </span>
+          <span>Hosted by {host.name}</span>
+        </Link>
+      )}
 
       {/* Meta */}
       <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '16px' }}>
