@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import { fetchUpcomingEventsGlobal, fetchPastEventsGlobal } from '@/lib/events'
 import { detectCity, saveCity } from '@/lib/utils'
 import { onAuthChange } from '@/lib/auth'
@@ -11,13 +10,7 @@ import { getUserProfile } from '@/lib/users'
 
 const EVENT_FILTERS = ['All', 'Drinks', 'Coffee', 'Walk', 'Dinner', 'Language', 'Hangout']
 
-// Mini Map pour le Hero Event
-const MiniMap = dynamic(() => import('@/components/events/MapComponent'), {
-  ssr: false,
-  loading: () => <div style={{ height: '120px', width: '200px', background: '#f0f0f0', borderRadius: '16px' }} />
-})
-
-// Helper pour formater la date de façon sexy
+// Helper pour formater la date
 function formatEventDate(date) {
   const eventDate = date?.toDate ? date.toDate() : new Date(date)
   const now = new Date()
@@ -35,6 +28,21 @@ function formatEventDate(date) {
          ' · ' + eventDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
 }
 
+// Helpers pour les textes cohérents
+function getJoinText(count) {
+  if (count === 0) return 'Be the first to join ✨'
+  if (count === 1) return '1 person is joining'
+  return `${count} people are joining`
+}
+
+function getSpotsLeftText(count, capacity) {
+  const spotsLeft = Math.max((capacity ?? 0) - count, 0)
+  if (spotsLeft === 0) return 'Event is full'
+  if (spotsLeft === 1) return 'Last spot available'
+  if (spotsLeft <= 3) return `${spotsLeft} spots left`
+  return `${spotsLeft} spots available`
+}
+
 export default function EventsPage() {
   const [upcomingEvents, setUpcomingEvents] = useState([])
   const [pastEvents, setPastEvents] = useState([])
@@ -43,6 +51,7 @@ export default function EventsPage() {
   const [filter, setFilter] = useState('All')
   const [user, setUser] = useState(null)
   const [hosts, setHosts] = useState({})
+  const [participants, setParticipants] = useState({})
 
   useEffect(() => {
     const unsub = onAuthChange(setUser)
@@ -52,6 +61,20 @@ export default function EventsPage() {
   useEffect(() => {
     detectCity().then(c => setCity(c || 'chennai'))
   }, [])
+
+  async function loadParticipants(eventId) {
+    try {
+      const { getEventParticipants } = await import('@/lib/events')
+      const parts = await getEventParticipants(eventId)
+      const users = await Promise.all(
+        parts.slice(0, 6).map(p => getUserProfile(p.user_id))
+      )
+      return users.filter(Boolean)
+    } catch (err) {
+      console.error('Failed to load participants:', err)
+      return []
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -64,7 +87,6 @@ export default function EventsPage() {
         setUpcomingEvents(upcoming)
         setPastEvents(past)
         
-        // Charger les profils des hôtes pour les past events
         const hostProfiles = {}
         for (const event of [...upcoming, ...past]) {
           const hostId = event.host_id || event.hostId
@@ -74,6 +96,11 @@ export default function EventsPage() {
           }
         }
         setHosts(hostProfiles)
+        
+        if (upcoming[0]) {
+          const parts = await loadParticipants(upcoming[0].id)
+          setParticipants({ [upcoming[0].id]: parts })
+        }
       } catch (err) {
         console.error('Failed to fetch events:', err)
         setUpcomingEvents([])
@@ -99,14 +126,12 @@ export default function EventsPage() {
     saveCity(c)
   }
 
-  // Hero event = premier upcoming
   const heroEvent = filteredUpcoming[0]
   const restUpcoming = filteredUpcoming.slice(1)
-  
-  // Coordonnées pour la carte du hero
-  const heroMapCenter = heroEvent?.coordinates?.lat && heroEvent?.coordinates?.lng
-    ? [Number(heroEvent.coordinates.lat), Number(heroEvent.coordinates.lng)]
-    : null
+  const heroParticipants = participants[heroEvent?.id] || []
+  const participantCount = heroEvent?.participants_count ?? 0
+  const spotsLeft = (heroEvent?.capacity_max ?? 9) - participantCount
+  const isFull = spotsLeft === 0
 
   return (
     <div style={{ paddingTop: '80px', minHeight: '100vh', background: '#fff' }}>
@@ -201,28 +226,31 @@ export default function EventsPage() {
             📅 Upcoming
           </h2>
           
-          {/* HERO EVENT AVEC MAP */}
+          {/* HERO EVENT AVEC PARTICIPANTS - LOGIQUE COHÉRENTE */}
           {heroEvent && (
             <Link href={`/events/${heroEvent.id}`} style={{ textDecoration: 'none' }}>
               <div style={{
-                background: 'var(--coral-pale)',
+                background: '#fff',
                 borderRadius: 24,
                 padding: 28,
                 marginBottom: 32,
-                border: '1px solid var(--coral-border)',
+                border: '2px solid var(--coral-border)',
+                boxShadow: '0 8px 24px rgba(255,107,81,0.12)',
                 transition: 'all 0.2s',
               }}
               onMouseEnter={e => {
                 e.currentTarget.style.transform = 'translateY(-4px)'
-                e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.1)'
+                e.currentTarget.style.boxShadow = '0 16px 32px rgba(255,107,81,0.2)'
+                e.currentTarget.style.borderColor = 'var(--coral)'
               }}
               onMouseLeave={e => {
                 e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = 'none'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(255,107,81,0.12)'
+                e.currentTarget.style.borderColor = 'var(--coral-border)'
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 24 }}>
                   {/* Left content */}
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 2 }}>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
                       <span style={{
                         padding: '4px 12px',
@@ -232,7 +260,7 @@ export default function EventsPage() {
                         fontSize: '0.7rem',
                         fontWeight: 600,
                       }}>⭐ Next in {heroEvent.city}</span>
-                      {heroEvent.participants_count >= heroEvent.capacity_max - 2 && (
+                      {spotsLeft === 1 && (
                         <span style={{
                           padding: '4px 12px',
                           borderRadius: 20,
@@ -240,7 +268,17 @@ export default function EventsPage() {
                           color: '#92400E',
                           fontSize: '0.7rem',
                           fontWeight: 600,
-                        }}>🔥 Almost full</span>
+                        }}>🔥 Last spot!</span>
+                      )}
+                      {isFull && (
+                        <span style={{
+                          padding: '4px 12px',
+                          borderRadius: 20,
+                          background: '#FEE2E2',
+                          color: '#991B1B',
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                        }}>🔴 Full</span>
                       )}
                     </div>
                     <h2 style={{
@@ -253,7 +291,6 @@ export default function EventsPage() {
                       {heroEvent.meetingPoint || heroEvent.location_name}
                     </h2>
                     
-                    {/* Host info */}
                     {hosts[heroEvent.host_id || heroEvent.hostId] && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                         <div style={{
@@ -276,36 +313,110 @@ export default function EventsPage() {
                     <p style={{ color: 'var(--text-mid)', marginBottom: 12, fontSize: '0.85rem', lineHeight: 1.5 }}>
                       {heroEvent.description?.substring(0, 100)}...
                     </p>
-                    <p style={{ color: 'var(--coral)', fontWeight: 600 }}>
-                      {heroEvent.participants_count} joined · {heroEvent.capacity_max - heroEvent.participants_count} spots left
+                    
+                    {/* Texte spots left cohérent */}
+                    <p style={{ color: isFull ? '#991B1B' : 'var(--coral)', fontWeight: 600, marginBottom: 16 }}>
+                      {getSpotsLeftText(participantCount, heroEvent.capacity_max)}
                     </p>
+                    
+                    {/* Bouton corail */}
+                    {!isFull && (
+                      <div style={{
+                        display: 'inline-block',
+                        background: 'var(--coral)',
+                        color: '#fff',
+                        padding: '10px 28px',
+                        borderRadius: 40,
+                        fontWeight: 600,
+                        fontSize: '0.9rem',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.transform = 'scale(1.02)'
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(255,107,81,0.4)'
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.transform = 'scale(1)'
+                        e.currentTarget.style.boxShadow = 'none'
+                      }}>
+                        Join ${heroEvent.price ?? 2} →
+                      </div>
+                    )}
                   </div>
-                  
-                  {/* Right content - MAP */}
-                  {heroMapCenter && (
-                    <div style={{
-                      width: '200px',
-                      flexShrink: 0,
-                      borderRadius: 16,
-                      overflow: 'hidden',
-                      border: '1px solid var(--coral-border)'
-                    }}>
-                      <MiniMap 
-                        center={heroMapCenter}
-                        location={heroEvent.meetingPoint || heroEvent.location_name}
-                        height="120px"
-                      />
-                    </div>
-                  )}
-                  
-                  <div style={{
-                    background: '#fff',
-                    padding: '12px 24px',
-                    borderRadius: 40,
-                    fontWeight: 600,
-                    color: 'var(--coral)'
-                  }}>
-                    Join ${heroEvent.price ?? 2} →
+
+                  {/* Right content - Participants avatars (cohérent) */}
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    {participantCount > 0 ? (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+                          {heroParticipants.slice(0, 5).map((p, idx) => (
+                            <div
+                              key={p.id}
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: '50%',
+                                background: 'var(--coral-pale)',
+                                border: '2px solid #fff',
+                                marginLeft: idx === 0 ? 0 : -12,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '1.2rem',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                              }}
+                              title={p.name}
+                            >
+                              {p.photo_url ? (
+                                <img src={p.photo_url} alt={p.name} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
+                              ) : (
+                                <span>{p.name?.[0] || '👤'}</span>
+                              )}
+                            </div>
+                          ))}
+                          {participantCount > 5 && (
+                            <div style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: '50%',
+                              background: 'var(--coral)',
+                              border: '2px solid #fff',
+                              marginLeft: -12,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              color: '#fff'
+                            }}>
+                              +{participantCount - 5}
+                            </div>
+                          )}
+                        </div>
+                        <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)', marginTop: 8 }}>
+                          {getJoinText(participantCount)}
+                        </p>
+                        {spotsLeft <= 3 && spotsLeft > 0 && (
+                          <p style={{ fontSize: '0.7rem', color: 'var(--coral)', marginTop: 4 }}>
+                            ⚡ Only {spotsLeft} spot{spotsLeft > 1 ? 's' : ''} left!
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <div style={{
+                        padding: '20px',
+                        background: 'var(--coral-pale)',
+                        borderRadius: 20,
+                      }}>
+                        <div style={{ fontSize: '2rem', marginBottom: 8 }}>✨</div>
+                        <p style={{ fontWeight: 600, color: 'var(--coral)', fontSize: '0.85rem', marginBottom: 4 }}>
+                          Be the first to join!
+                        </p>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-mid)' }}>
+                          Start the vibe for this meetup
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -326,7 +437,7 @@ export default function EventsPage() {
               marginBottom: 20,
               color: 'var(--text)'
             }}>
-              🕐 Past events · {filteredPast.length}
+              🕐 Moments created
             </h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {filteredPast.map(event => {
@@ -360,7 +471,6 @@ export default function EventsPage() {
                       transition: 'all 0.2s',
                     }}
                   >
-                    {/* Date circle */}
                     <div style={{
                       width: 64,
                       height: 64,
@@ -378,7 +488,6 @@ export default function EventsPage() {
                       <div style={{ fontSize: 20, color: 'var(--text)' }}>{day}</div>
                     </div>
 
-                    {/* Content */}
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                         <span style={{
@@ -403,14 +512,12 @@ export default function EventsPage() {
                         {meetingPoint || venueName || `${typeLabel} meetup`}
                       </h3>
                       
-                      {/* Host info for past events */}
                       {host && (
                         <p style={{ margin: '0 0 4px 0', color: 'var(--text-mid)', fontSize: '0.7rem' }}>
                           👤 Hosted by {host.name}
                         </p>
                       )}
                       
-                      {/* Description for past events */}
                       {event.description && (
                         <p style={{ margin: '0 0 4px 0', color: 'var(--text-muted)', fontSize: '0.7rem', fontStyle: 'italic' }}>
                           "{event.description.substring(0, 80)}..."
@@ -432,7 +539,6 @@ export default function EventsPage() {
           </section>
         )}
 
-        {/* Footer padding */}
         <div style={{ height: '80px' }} />
       </Container>
     </div>
