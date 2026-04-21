@@ -15,7 +15,11 @@ export async function POST(request) {
       return Response.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+
+    if (!appUrl) {
+      return Response.json({ error: 'Missing NEXT_PUBLIC_APP_URL' }, { status: 500 })
+    }
 
     // 🔥 FLUX 1: HOST - Créer un nouvel événement
     if (type === 'host') {
@@ -24,35 +28,29 @@ export async function POST(request) {
       }
 
       const pendingRef = adminDb.collection('pending_events').doc()
-      
-      // 🔥 TOUS les champs du formulaire sont maintenant sauvegardés
+
       await pendingRef.set({
-        // Champs obligatoires
         hostId: userId,
         type: eventData.type || 'outing',
         city: eventData.city || '',
-        meetingPoint: eventData.meetingPoint || '',        // 👈 NOUVEAU : point de rencontre
+        meetingPoint: eventData.meetingPoint || '',
         time: eventData.time || eventData.startAt || '',
         capacity: Number(eventData.capacity) || 9,
         description: eventData.description || '',
-        
-        // Champs optionnels
-        location_name: eventData.location_name || eventData.meetingPoint || '',  // Pour compatibilité
-        venue: eventData.venue || '',                       // 👈 NOUVEAU : établissement
-        coordinates: eventData.coordinates || null,         // 👈 NOUVEAU : { lat, lng, name }
-        
-        // Capacités min/max
-        capacity_min: Number(eventData.capacity_min) || 6,  // 👈 NOUVEAU
-        capacity_max: Number(eventData.capacity_max) || 9,  // 👈 NOUVEAU
-        
-        // Métadonnées
+
+        location_name: eventData.location_name || eventData.meetingPoint || '',
+        venue: eventData.venue || '',
+        coordinates: eventData.coordinates || null,
+
+        capacity_min: Number(eventData.capacity_min) || 6,
+        capacity_max: Number(eventData.capacity_max) || 9,
+
         seatsTaken: 0,
-        participants_count: 0,                              // 👈 Pour compatibilité avec meetups
+        participants_count: 0,
         price: 2,
         currency: 'usd',
         status: 'pending_payment',
-        
-        // Timestamps
+
         createdAt: adminFieldValue.serverTimestamp(),
         updatedAt: adminFieldValue.serverTimestamp(),
       })
@@ -101,7 +99,6 @@ export async function POST(request) {
         return Response.json({ error: 'Missing eventId' }, { status: 400 })
       }
 
-      // Lire depuis meetups
       const meetupRef = adminDb.collection('meetups').doc(eventId)
       const meetupSnap = await meetupRef.get()
 
@@ -117,7 +114,6 @@ export async function POST(request) {
         return Response.json({ error: 'Event is full' }, { status: 400 })
       }
 
-      // Vérifier que l'utilisateur n'a pas déjà rejoint
       const existingParticipantQuery = await adminDb
         .collection('participants')
         .where('event_id', '==', eventId)
@@ -159,7 +155,6 @@ export async function POST(request) {
     }
 
     return Response.json({ error: 'Invalid type' }, { status: 400 })
-
   } catch (err) {
     console.error('[Stripe Checkout] Error:', err)
     return Response.json({ error: err.message }, { status: 500 })
