@@ -27,7 +27,15 @@ export default function UpcomingMeetups() {
     async function loadMeetups() {
       try {
         const data = await fetchUpcomingEventsGlobal(4)
-        console.log('📅 Events loaded:', data.length)
+        console.log('📅 [UpcomingMeetups] Events loaded:', data.length)
+        
+        // 🔍 LOG CRUCIAL - Vérifier l'ID du premier événement
+        if (data.length > 0) {
+          console.log('📅 [UpcomingMeetups] First event id:', data[0]?.id)
+          console.log('📅 [UpcomingMeetups] First event type of id:', typeof data[0]?.id)
+          console.log('📅 [UpcomingMeetups] First event full:', data[0])
+        }
+        
         setMeetups(data)
       } catch (error) {
         console.error('Error loading events:', error)
@@ -105,6 +113,9 @@ export default function UpcomingMeetups() {
           gap: 20
         }}>
           {meetups.map(meetup => {
+            // 🔍 LOG dans la map
+            console.log('🎴 [UpcomingMeetups] Rendering meetup id:', meetup?.id)
+            
             // Normalisation des champs
             const meetupType = meetup.type || meetup.category || 'hangout'
             const city = meetup.city || meetup.location || ''
