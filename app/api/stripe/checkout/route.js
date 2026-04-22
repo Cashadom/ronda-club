@@ -8,8 +8,20 @@ const PRICE_CENTS = 200 // $2.00 USD
 // UNIQUEMENT création de sessions Stripe - PAS de webhook ici
 export async function POST(request) {
   try {
+    console.log('[Checkout] route hit')
+
     const body = await request.json()
     const { type, userId, eventData, eventId, userName } = body
+
+    console.log('[Checkout] type =', type)
+    console.log('[Checkout] userId =', userId)
+    console.log('[Checkout] eventId =', eventId)
+    console.log('[Checkout] has eventData =', !!eventData)
+    console.log('[Checkout] NEXT_PUBLIC_APP_URL =', process.env.NEXT_PUBLIC_APP_URL)
+    console.log('[Checkout] STRIPE_SECRET_KEY exists =', !!process.env.STRIPE_SECRET_KEY)
+    console.log('[Checkout] FIREBASE_PROJECT_ID exists =', !!process.env.FIREBASE_PROJECT_ID)
+    console.log('[Checkout] FIREBASE_CLIENT_EMAIL exists =', !!process.env.FIREBASE_CLIENT_EMAIL)
+    console.log('[Checkout] FIREBASE_PRIVATE_KEY exists =', !!process.env.FIREBASE_PRIVATE_KEY)
 
     if (!type || !userId) {
       return Response.json({ error: 'Missing required fields' }, { status: 400 })
@@ -99,8 +111,12 @@ export async function POST(request) {
         return Response.json({ error: 'Missing eventId' }, { status: 400 })
       }
 
+      console.log('[Checkout] Looking up meetup in collection "meetups" with id:', eventId)
+
       const meetupRef = adminDb.collection('meetups').doc(eventId)
       const meetupSnap = await meetupRef.get()
+
+      console.log('[Checkout] meetup exists =', meetupSnap.exists)
 
       if (!meetupSnap.exists) {
         return Response.json({ error: 'Event not found' }, { status: 404 })
@@ -109,6 +125,16 @@ export async function POST(request) {
       const meetup = meetupSnap.data()
       const meetupLimit = meetup.capacity_max || meetup.capacity || 9
       const currentParticipants = meetup.participants_count || meetup.seatsTaken || 0
+
+      console.log('[Checkout] meetup data summary:', {
+        title: meetup.title,
+        type: meetup.type,
+        city: meetup.city,
+        capacity_max: meetup.capacity_max,
+        capacity: meetup.capacity,
+        participants_count: meetup.participants_count,
+        seatsTaken: meetup.seatsTaken,
+      })
 
       if (currentParticipants >= meetupLimit) {
         return Response.json({ error: 'Event is full' }, { status: 400 })
@@ -119,6 +145,11 @@ export async function POST(request) {
         .where('event_id', '==', eventId)
         .where('user_id', '==', userId)
         .get()
+
+      console.log(
+        '[Checkout] existing participant docs =',
+        existingParticipantQuery.size
+      )
 
       if (!existingParticipantQuery.empty) {
         return Response.json({ error: 'Already joined' }, { status: 400 })
@@ -156,7 +187,13 @@ export async function POST(request) {
 
     return Response.json({ error: 'Invalid type' }, { status: 400 })
   } catch (err) {
-    console.error('[Stripe Checkout] Error:', err)
-    return Response.json({ error: err.message }, { status: 500 })
+    console.error('[Stripe Checkout] Full error object:', err)
+    console.error('[Stripe Checkout] Message:', err?.message)
+    console.error('[Stripe Checkout] Stack:', err?.stack)
+
+    return Response.json(
+      { error: err?.message || 'Unknown checkout error' },
+      { status: 500 }
+    )
   }
 }
