@@ -4,8 +4,6 @@ import { adminDb, adminFieldValue } from '@/lib/firebaseAdmin'
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 const PRICE_CENTS = 200 // $2.00 USD
 
-// ─── POST /api/stripe/checkout ─────────────────────────────────────────────
-// UNIQUEMENT création de sessions Stripe - PAS de webhook ici
 export async function POST(request) {
   try {
     console.log('[Checkout] route hit')
@@ -33,42 +31,52 @@ export async function POST(request) {
       return Response.json({ error: 'Missing NEXT_PUBLIC_APP_URL' }, { status: 500 })
     }
 
-    // 🔥 FLUX 1: HOST - Créer un nouvel événement
+    // HOST
     if (type === 'host') {
       if (!eventData) {
         return Response.json({ error: 'Missing eventData' }, { status: 400 })
       }
 
-      const pendingRef = adminDb.collection('pending_events').doc()
+      const meetupRef = adminDb.collection('meetups').doc()
 
-      await pendingRef.set({
+      await meetupRef.set({
+        id: meetupRef.id,
+
         hostId: userId,
+
         type: eventData.type || 'outing',
-        city: eventData.city || '',
-        meetingPoint: eventData.meetingPoint || '',
-        time: eventData.time || eventData.startAt || '',
-        capacity: Number(eventData.capacity) || 9,
+        title: eventData.title || `${eventData.type || 'Event'} in ${eventData.city || ''}`,
         description: eventData.description || '',
 
-        location_name: eventData.location_name || eventData.meetingPoint || '',
+        city: eventData.city || '',
+        meetingPoint: eventData.meetingPoint || '',
         venue: eventData.venue || '',
+        location_name: eventData.location_name || eventData.meetingPoint || '',
+
+        startAt: eventData.startAt || eventData.time || '',
+
         coordinates: eventData.coordinates || null,
 
+        capacity: Number(eventData.capacity) || 9,
         capacity_min: Number(eventData.capacity_min) || 6,
         capacity_max: Number(eventData.capacity_max) || 9,
-
-        seatsTaken: 0,
         participants_count: 0,
+
         price: 2,
         currency: 'usd',
-        status: 'pending_payment',
+
+        status: 'pending',
+        paymentStatus: 'pending',
+
+        stripeSessionId: '',
+        stripePaymentIntent: '',
 
         createdAt: adminFieldValue.serverTimestamp(),
         updatedAt: adminFieldValue.serverTimestamp(),
       })
 
-      console.log('[Checkout] Pending event created with full data:', {
-        id: pendingRef.id,
+      console.log('[Checkout] Meetup created in meetups with pending status:', {
+        id: meetupRef.id,
         city: eventData.city,
         meetingPoint: eventData.meetingPoint,
         venue: eventData.venue,
@@ -94,8 +102,7 @@ export async function POST(request) {
         metadata: {
           checkoutType: 'publish_event',
           userId,
-          pendingEventId: pendingRef.id,
-          eventDataJson: JSON.stringify(eventData),
+          meetupId: meetupRef.id,
         },
         success_url: `${appUrl}/events?created=1`,
         cancel_url: `${appUrl}/create?cancelled=1`,
@@ -105,7 +112,7 @@ export async function POST(request) {
       return Response.json({ url: session.url })
     }
 
-    // 🔥 FLUX 2: JOIN - Réserver une place sur un événement existant
+    // JOIN
     if (type === 'join') {
       if (!eventId) {
         return Response.json({ error: 'Missing eventId' }, { status: 400 })
@@ -124,7 +131,7 @@ export async function POST(request) {
 
       const meetup = meetupSnap.data()
       const meetupLimit = meetup.capacity_max || meetup.capacity || 9
-      const currentParticipants = meetup.participants_count || meetup.seatsTaken || 0
+      const currentParticipants = meetup.participants_count || 0
 
       console.log('[Checkout] meetup data summary:', {
         title: meetup.title,
@@ -133,7 +140,6 @@ export async function POST(request) {
         capacity_max: meetup.capacity_max,
         capacity: meetup.capacity,
         participants_count: meetup.participants_count,
-        seatsTaken: meetup.seatsTaken,
       })
 
       if (currentParticipants >= meetupLimit) {
@@ -146,10 +152,7 @@ export async function POST(request) {
         .where('user_id', '==', userId)
         .get()
 
-      console.log(
-        '[Checkout] existing participant docs =',
-        existingParticipantQuery.size
-      )
+      console.log('[Checkout] existing participant docs =', existingParticipantQuery.size)
 
       if (!existingParticipantQuery.empty) {
         return Response.json({ error: 'Already joined' }, { status: 400 })

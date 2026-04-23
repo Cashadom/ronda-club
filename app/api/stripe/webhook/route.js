@@ -38,98 +38,34 @@ export async function POST(req) {
     console.log('📦 Webhook processing:', { checkoutType, sessionId: session.id })
 
     try {
-      // 🔥 FLUX 1: PUBLISH_EVENT - création dans meetups
+      // 🔥 FLUX 1: PUBLISH_EVENT - Mettre à jour le meetup existant (pending → paid)
       if (checkoutType === 'publish_event') {
-        const { userId, pendingEventId, eventDataJson } = metadata
+        const { userId, meetupId } = metadata
 
-        const pendingRef = adminDb.collection('pending_events').doc(pendingEventId)
-        const pendingSnap = await pendingRef.get()
-
-        if (!pendingSnap.exists) {
-          console.error('❌ Pending not found:', pendingEventId)
+        if (!meetupId) {
+          console.error('❌ No meetupId in metadata')
           return new Response('ok', { status: 200 })
         }
 
-        const pendingData = pendingSnap.data()
-        const eventData = JSON.parse(eventDataJson || '{}')
+        const meetupRef = adminDb.collection('meetups').doc(meetupId)
+        const meetupSnap = await meetupRef.get()
 
-        // 🔥 CORRECTION: Convertir les coordonnées en nombres
-        let normalizedCoordinates = null
-        const rawCoords = pendingData.coordinates || eventData.coordinates
-        if (rawCoords && rawCoords.lat && rawCoords.lng) {
-          normalizedCoordinates = {
-            lat: Number(rawCoords.lat),      // force en number
-            lng: Number(rawCoords.lng),      // force en number
-            name: rawCoords.name || pendingData.city || ''
-          }
-          console.log('🗺️ Coordinates normalized:', normalizedCoordinates)
+        if (!meetupSnap.exists) {
+          console.error('❌ Meetup not found:', meetupId)
+          return new Response('ok', { status: 200 })
         }
 
-        // 🔥 meetups au lieu de events
-        const meetupRef = adminDb.collection('meetups').doc()
-
-        // 🔥 TOUS les champs sont maintenant transférés
-        await meetupRef.set({
-          // Champs de base
-          ...pendingData,
-          
-          // Titre et description
-          title: eventData.title || pendingData.title || `${pendingData.type} in ${pendingData.city}`,
-          description: pendingData.description || eventData.description || '',
-          
-          // Hôte
-          host_id: userId,
-          hostId: userId,  // Pour compatibilité
-          
-          // Lieu (NOUVEAUX CHAMPS)
-          city: pendingData.city || eventData.city || '',
-          meetingPoint: pendingData.meetingPoint || eventData.meetingPoint || '',
-          venue: pendingData.venue || eventData.venue || '',
-          location_name: pendingData.location_name || eventData.location_name || pendingData.meetingPoint || '',
-          
-          // 🔥 Coordonnées géographiques CORRIGÉES (avec nombres)
-          coordinates: normalizedCoordinates,
-          
-          // Capacités
-          capacity: Number(pendingData.capacity) || 9,
-          capacity_min: Number(pendingData.capacity_min) || Number(eventData.capacity_min) || 6,
-          capacity_max: Number(pendingData.capacity_max) || Number(eventData.capacity_max) || 9,
-          
-          // Participants
-          participants_count: 0,
-          seatsTaken: 0,
-          
-          // Type et statut
-          type: pendingData.type || eventData.type || 'outing',
-          status: 'open',
+        // 🔥 Mettre à jour le meetup existant (status: pending → paid)
+        await meetupRef.update({
+          status: 'paid',
           paymentStatus: 'paid',
-          
-          // Stripe
           stripeSessionId: session.id,
           stripePaymentIntent: session.payment_intent,
-          
-          // Timestamps
-          timestamp: pendingData.createdAt || adminFieldValue.serverTimestamp(),
           publishedAt: adminFieldValue.serverTimestamp(),
-          createdAt: pendingData.createdAt || adminFieldValue.serverTimestamp(),
           updatedAt: adminFieldValue.serverTimestamp(),
         })
 
-        await pendingRef.update({
-          status: 'completed',
-          publishedMeetupId: meetupRef.id,
-          updatedAt: adminFieldValue.serverTimestamp(),
-        })
-
-        console.log('🔥 MEETUP PUBLISHED:', meetupRef.id, {
-          city: pendingData.city,
-          meetingPoint: pendingData.meetingPoint,
-          venue: pendingData.venue,
-          hasCoordinates: !!normalizedCoordinates,
-          coordinatesType: normalizedCoordinates ? typeof normalizedCoordinates.lat : 'none',
-          capacity_min: pendingData.capacity_min,
-          capacity_max: pendingData.capacity_max,
-        })
+        console.log('🔥 MEETUP MARKED AS PAID:', meetupId)
       }
 
       // 🔥 FLUX 2: JOIN_EVENT - réservation dans meetups
@@ -141,11 +77,17 @@ export async function POST(req) {
         await adminDb.runTransaction(async (tx) => {
           const meetupSnap = await tx.get(meetupRef)
 
-          if (!meetupSnap.exists) {
+          if (!meetupSnap.exists()) {
             throw new Error('MEETUP_NOT_FOUND')
           }
 
           const meetup = meetupSnap.data()
+          
+          // 🔥 Vérifier que l'event est bien payé
+          if (meetup.status !== 'paid' && meetup.status !== 'open') {
+            throw new Error('MEETUP_NOT_AVAILABLE')
+          }
+
           const meetupLimit = meetup.capacity_max || meetup.capacity || 9
           const currentParticipants = meetup.participants_count || 0
 

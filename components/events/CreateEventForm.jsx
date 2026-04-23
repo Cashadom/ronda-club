@@ -196,16 +196,18 @@ export default function CreateEventForm({ userId, userCity }) {
     }
   }
 
+  // 🔥 CORRECTION : eventData avec startAt et title
   const eventData = {
-    type:          form.type,
-    city:          form.city.trim(),
-    meetingPoint:  form.meetingPoint.trim(),  // Champ libre
-    location_name: form.meetingPoint.trim(),  // Pour compatibilité
-    time:          getEventDateTime(),
-    capacity:      form.capacity,
-    description:   form.description.trim(),
-    capacity_min:  CAPACITY_MIN,
-    capacity_max:  CAPACITY_MAX,
+    type: form.type,
+    title: `${selectedType.label} in ${form.city.trim()}`,
+    city: form.city.trim(),
+    meetingPoint: form.meetingPoint.trim(),
+    location_name: form.meetingPoint.trim(),
+    startAt: getEventDateTime(),  // ← CHANGÉ : time → startAt
+    capacity: form.capacity,
+    description: form.description.trim(),
+    capacity_min: CAPACITY_MIN,
+    capacity_max: CAPACITY_MAX,
     ...(coordinates && { coordinates }),
   }
 
@@ -231,7 +233,7 @@ export default function CreateEventForm({ userId, userCity }) {
             ['📍 Meeting point', form.meetingPoint.trim()],
             ['🏙 City', form.city.trim()],
             ['⏰ Time', `${form.date} at ${form.time}`],
-            ['👥 Capacity', `${form.capacity} people max`],  // ✅ CORRIGÉ
+            ['👥 Capacity', `${form.capacity} people max`],
             form.description.trim() && ['💬 About', form.description.trim()],
             coordinates && ['🗺️ Map', '📍 Location detected'],
           ].filter(Boolean).map(([label, value]) => (
