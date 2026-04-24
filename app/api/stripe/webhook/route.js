@@ -50,6 +50,7 @@ export async function POST(req) {
         const meetupRef = adminDb.collection('meetups').doc(meetupId)
         const meetupSnap = await meetupRef.get()
 
+        // 🔥 CORRECTION: .exists (pas .exists())
         if (!meetupSnap.exists) {
           console.error('❌ Meetup not found:', meetupId)
           return new Response('ok', { status: 200 })
@@ -76,13 +77,13 @@ export async function POST(req) {
         await adminDb.runTransaction(async (tx) => {
           const meetupSnap = await tx.get(meetupRef)
 
-          if (!meetupSnap.exists()) {
+          // 🔥 CORRECTION: .exists (pas .exists())
+          if (!meetupSnap.exists) {
             throw new Error('MEETUP_NOT_FOUND')
           }
 
           const meetup = meetupSnap.data()
           
-          // 🔥 SIMPLIFIÉ : on vérifie seulement que l'event est payé
           if (meetup.status !== 'paid') {
             throw new Error('MEETUP_NOT_AVAILABLE')
           }
@@ -94,7 +95,6 @@ export async function POST(req) {
             throw new Error('MEETUP_FULL')
           }
 
-          // Vérifier doublon de session Stripe
           const duplicateQuery = adminDb
             .collection('meetup_participants')
             .where('event_id', '==', eventId)
@@ -107,7 +107,6 @@ export async function POST(req) {
             return
           }
 
-          // Vérifier que l'utilisateur n'a pas déjà rejoint
           const userExistingQuery = adminDb
             .collection('meetup_participants')
             .where('event_id', '==', eventId)
@@ -121,13 +120,11 @@ export async function POST(req) {
 
           const newCount = currentParticipants + 1
 
-          // 🔥 ON NE TOUCHE PAS AU STATUS - on garde 'paid'
           tx.update(meetupRef, {
             participants_count: newCount,
             updatedAt: adminFieldValue.serverTimestamp(),
           })
 
-          // Ajouter le participant
           const participantRef = adminDb.collection('meetup_participants').doc()
           tx.set(participantRef, {
             user_id: userId,
@@ -144,7 +141,9 @@ export async function POST(req) {
       }
 
     } catch (err) {
+      // 🔥 CORRECTION: meilleur log d'erreur
       console.error('💥 Webhook error:', err.message)
+      console.error('💥 Webhook stack:', err.stack)
       return new Response('ok', { status: 200 })
     }
   }
