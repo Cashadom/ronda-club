@@ -1,46 +1,56 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { fetchUpcomingEventsGlobal, fetchPastEventsGlobal } from '@/lib/events'
 import { detectCity, saveCity } from '@/lib/utils'
 import { onAuthChange } from '@/lib/auth'
-import EventList from '@/components/events/EventList'
 import { Container } from '@/components/ui/index'
 import { getUserProfile } from '@/lib/users'
 
 const EVENT_FILTERS = ['All', 'Drinks', 'Coffee', 'Walk', 'Dinner', 'Language', 'Hangout']
 
 // Helper pour formater la date
-function formatEventDate(date) {
-  const eventDate = date?.toDate ? date.toDate() : new Date(date)
+function formatEventDate(startAt) {
+  if (!startAt) return 'Date TBD'
+  const eventDate = new Date(startAt)
+  if (isNaN(eventDate.getTime())) return 'Date TBD'
+  
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const tomorrow = new Date(today)
   tomorrow.setDate(tomorrow.getDate() + 1)
   const eventDay = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate())
+  const isToday = eventDay.getTime() === today.getTime()
+  const isTomorrow = eventDay.getTime() === tomorrow.getTime()
 
-  if (eventDay.getTime() === today.getTime()) {
-    return `Tonight · ${eventDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
-  } else if (eventDay.getTime() === tomorrow.getTime()) {
-    return `Tomorrow · ${eventDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
-  }
-  return eventDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + 
-         ' · ' + eventDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  const timeStr = eventDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  
+  if (isToday) return `Tonight · ${timeStr}`
+  if (isTomorrow) return `Tomorrow · ${timeStr}`
+  
+  return eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' + timeStr
 }
 
-// Helpers pour les textes cohérents
-function getJoinText(count) {
-  if (count === 0) return 'Be the first to join ✨'
-  if (count === 1) return '1 person is joining'
-  return `${count} people are joining`
+// Helper pour le nombre de spots restants
+function getSpotsRemainingText(participants, capacity) {
+  const remaining = (capacity ?? 9) - (participants ?? 0)
+  if (remaining <= 0) return 'Full'
+  if (remaining === 1) return '1 spot left'
+  return `${remaining} spots left`
 }
 
-function getSpotsLeftText(count, capacity) {
-  const spotsLeft = Math.max((capacity ?? 0) - count, 0)
-  if (spotsLeft === 0) return 'Event is full'
-  if (spotsLeft === 1) return 'Last spot available'
-  if (spotsLeft <= 3) return `${spotsLeft} spots left`
-  return `${spotsLeft} spots available`
+// Helper pour le badge de statut
+function getStatusBadge(participants, capacity, startAt) {
+  const remaining = (capacity ?? 9) - (participants ?? 0)
+  const eventDate = startAt ? new Date(startAt) : null
+  const now = new Date()
+  const isToday = eventDate && eventDate.toDateString() === now.toDateString()
+  
+  if (remaining <= 0) return { text: 'Full', color: '#991B1B', bg: '#FEE2E2' }
+  if (isToday) return { text: 'Tonight', color: '#C43A22', bg: '#FEE8E5' }
+  if (remaining <= 2) return { text: `Only ${remaining} left`, color: '#92400E', bg: '#FEF3C7' }
+  return null
 }
 
 export default function EventsPage() {
@@ -51,7 +61,7 @@ export default function EventsPage() {
   const [filter, setFilter] = useState('All')
   const [user, setUser] = useState(null)
   const [hosts, setHosts] = useState({})
-  const [participants, setParticipants] = useState({})
+  const [participantsAvatars, setParticipantsAvatars] = useState({})
 
   useEffect(() => {
     const unsub = onAuthChange(setUser)
@@ -62,16 +72,15 @@ export default function EventsPage() {
     detectCity().then(c => setCity(c || 'chennai'))
   }, [])
 
-  async function loadParticipants(eventId) {
+  async function loadParticipantsAvatars(eventId) {
     try {
       const { getEventParticipants } = await import('@/lib/events')
       const parts = await getEventParticipants(eventId)
       const users = await Promise.all(
-        parts.slice(0, 6).map(p => getUserProfile(p.user_id))
+        parts.slice(0, 3).map(p => getUserProfile(p.user_id))
       )
       return users.filter(Boolean)
     } catch (err) {
-      console.error('Failed to load participants:', err)
       return []
     }
   }
@@ -88,19 +97,21 @@ export default function EventsPage() {
         setPastEvents(past)
         
         const hostProfiles = {}
+        const avatarsMap = {}
+        
         for (const event of [...upcoming, ...past]) {
           const hostId = event.host_id || event.hostId
           if (hostId && !hostProfiles[hostId]) {
             const profile = await getUserProfile(hostId)
             if (profile) hostProfiles[hostId] = profile
           }
+          if (event.participants_count > 0) {
+            const avatars = await loadParticipantsAvatars(event.id)
+            if (avatars.length) avatarsMap[event.id] = avatars
+          }
         }
         setHosts(hostProfiles)
-        
-        if (upcoming[0]) {
-          const parts = await loadParticipants(upcoming[0].id)
-          setParticipants({ [upcoming[0].id]: parts })
-        }
+        setParticipantsAvatars(avatarsMap)
       } catch (err) {
         console.error('Failed to fetch events:', err)
         setUpcomingEvents([])
@@ -126,13 +137,6 @@ export default function EventsPage() {
     saveCity(c)
   }
 
-  const heroEvent = filteredUpcoming[0]
-  const restUpcoming = filteredUpcoming.slice(1)
-  const heroParticipants = participants[heroEvent?.id] || []
-  const participantCount = heroEvent?.participants_count ?? 0
-  const spotsLeft = (heroEvent?.capacity_max ?? 9) - participantCount
-  const isFull = spotsLeft === 0
-
   return (
     <div style={{ paddingTop: '80px', minHeight: '100vh', background: '#fff' }}>
       <Container>
@@ -157,7 +161,7 @@ export default function EventsPage() {
             </h1>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', alignItems: 'center' }}>
             <input
               value={city}
               onChange={handleCityChange}
@@ -214,7 +218,7 @@ export default function EventsPage() {
           ))}
         </div>
 
-        {/* SECTION 1: UPCOMING EVENTS */}
+        {/* SECTION 1: UPCOMING EVENTS - GRID LAYOUT */}
         <section style={{ marginBottom: '60px' }}>
           <h2 style={{
             fontFamily: 'var(--font-display)',
@@ -226,205 +230,174 @@ export default function EventsPage() {
             📅 Upcoming
           </h2>
           
-          {/* HERO EVENT AVEC PARTICIPANTS - LOGIQUE COHÉRENTE */}
-          {heroEvent && (
-            <Link href={`/events/${heroEvent.id}`} style={{ textDecoration: 'none' }}>
-              <div style={{
-                background: '#fff',
-                borderRadius: 24,
-                padding: 28,
-                marginBottom: 32,
-                border: '2px solid var(--coral-border)',
-                boxShadow: '0 8px 24px rgba(255,107,81,0.12)',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = 'translateY(-4px)'
-                e.currentTarget.style.boxShadow = '0 16px 32px rgba(255,107,81,0.2)'
-                e.currentTarget.style.borderColor = 'var(--coral)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = '0 8px 24px rgba(255,107,81,0.12)'
-                e.currentTarget.style.borderColor = 'var(--coral-border)'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 24 }}>
-                  {/* Left content */}
-                  <div style={{ flex: 2 }}>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                      <span style={{
-                        padding: '4px 12px',
-                        borderRadius: 20,
-                        background: 'var(--coral)',
-                        color: '#fff',
-                        fontSize: '0.7rem',
-                        fontWeight: 600,
-                      }}>⭐ Next in {heroEvent.city}</span>
-                      {spotsLeft === 1 && (
-                        <span style={{
-                          padding: '4px 12px',
-                          borderRadius: 20,
-                          background: '#FEF3C7',
-                          color: '#92400E',
-                          fontSize: '0.7rem',
-                          fontWeight: 600,
-                        }}>🔥 Last spot!</span>
-                      )}
-                      {isFull && (
-                        <span style={{
-                          padding: '4px 12px',
-                          borderRadius: 20,
-                          background: '#FEE2E2',
-                          color: '#991B1B',
-                          fontSize: '0.7rem',
-                          fontWeight: 600,
-                        }}>🔴 Full</span>
-                      )}
-                    </div>
-                    <h2 style={{
-                      fontFamily: 'var(--font-display)',
-                      fontSize: '1.8rem',
-                      fontWeight: 800,
-                      marginBottom: 8,
-                      color: 'var(--text)'
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>Loading...</div>
+          ) : filteredUpcoming.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '60px',
+              background: 'var(--coral-pale)',
+              borderRadius: '24px'
+            }}>
+              <p>No upcoming events. Be the first to create one!</p>
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: '20px',
+            }}>
+              {filteredUpcoming.map(event => {
+                const participantCount = event.participants_count ?? 0
+                const capacity = event.capacity_max ?? 9
+                const spotsLeft = capacity - participantCount
+                const isFull = spotsLeft <= 0
+                const statusBadge = getStatusBadge(participantCount, capacity, event.startAt)
+                const host = hosts[event.host_id || event.hostId]
+                const avatars = participantsAvatars[event.id] || []
+                
+                return (
+                  <Link
+                    key={event.id}
+                    href={`/events/${event.id}`}
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <div style={{
+                      background: '#fff',
+                      borderRadius: 20,
+                      padding: '18px',
+                      border: '1px solid var(--border)',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                      transition: 'all 0.2s',
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.transform = 'translateY(-4px)'
+                      e.currentTarget.style.boxShadow = '0 12px 20px rgba(0,0,0,0.08)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'
                     }}>
-                      {heroEvent.meetingPoint || heroEvent.location_name}
-                    </h2>
-                    
-                    {hosts[heroEvent.host_id || heroEvent.hostId] && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                        <div style={{
-                          width: 28, height: 28, borderRadius: '50%',
-                          background: 'var(--coral)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: '#fff', fontSize: '0.7rem', fontWeight: 700
+                      
+                      {/* Badge + Type */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <span style={{
+                          padding: '4px 10px',
+                          borderRadius: 20,
+                          background: 'var(--coral-pale)',
+                          color: 'var(--coral)',
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
                         }}>
-                          {hosts[heroEvent.host_id || heroEvent.hostId]?.name?.[0] || '👤'}
-                        </div>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-mid)' }}>
-                          Hosted by {hosts[heroEvent.host_id || heroEvent.hostId]?.name}
+                          {event.type === 'walk' ? '🚶 Walk' : event.type === 'drinks' ? '🍻 Drinks' : event.type === 'coffee' ? '☕ Coffee' : event.type === 'dinner' ? '🍽 Dinner' : event.type === 'language' ? '🗣 Language' : '🎯 Hangout'}
                         </span>
-                      </div>
-                    )}
-                    
-                    <p style={{ color: 'var(--text-mid)', marginBottom: 8 }}>
-                      {formatEventDate(heroEvent.time)}
-                    </p>
-                    <p style={{ color: 'var(--text-mid)', marginBottom: 12, fontSize: '0.85rem', lineHeight: 1.5 }}>
-                      {heroEvent.description?.substring(0, 100)}...
-                    </p>
-                    
-                    {/* Texte spots left cohérent */}
-                    <p style={{ color: isFull ? '#991B1B' : 'var(--coral)', fontWeight: 600, marginBottom: 16 }}>
-                      {getSpotsLeftText(participantCount, heroEvent.capacity_max)}
-                    </p>
-                    
-                    {/* Bouton corail */}
-                    {!isFull && (
-                      <div style={{
-                        display: 'inline-block',
-                        background: 'var(--coral)',
-                        color: '#fff',
-                        padding: '10px 28px',
-                        borderRadius: 40,
-                        fontWeight: 600,
-                        fontSize: '0.9rem',
-                        transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.transform = 'scale(1.02)'
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(255,107,81,0.4)'
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.transform = 'scale(1)'
-                        e.currentTarget.style.boxShadow = 'none'
-                      }}>
-                        Join ${heroEvent.price ?? 2} →
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right content - Participants avatars (cohérent) */}
-                  <div style={{ flex: 1, textAlign: 'center' }}>
-                    {participantCount > 0 ? (
-                      <>
-                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-                          {heroParticipants.slice(0, 5).map((p, idx) => (
-                            <div
-                              key={p.id}
-                              style={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: '50%',
-                                background: 'var(--coral-pale)',
-                                border: '2px solid #fff',
-                                marginLeft: idx === 0 ? 0 : -12,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '1.2rem',
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                              }}
-                              title={p.name}
-                            >
-                              {p.photo_url ? (
-                                <img src={p.photo_url} alt={p.name} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }} />
-                              ) : (
-                                <span>{p.name?.[0] || '👤'}</span>
-                              )}
-                            </div>
-                          ))}
-                          {participantCount > 5 && (
-                            <div style={{
-                              width: 48,
-                              height: 48,
-                              borderRadius: '50%',
-                              background: 'var(--coral)',
-                              border: '2px solid #fff',
-                              marginLeft: -12,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '0.8rem',
-                              fontWeight: 700,
-                              color: '#fff'
-                            }}>
-                              +{participantCount - 5}
-                            </div>
-                          )}
-                        </div>
-                        <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)', marginTop: 8 }}>
-                          {getJoinText(participantCount)}
-                        </p>
-                        {spotsLeft <= 3 && spotsLeft > 0 && (
-                          <p style={{ fontSize: '0.7rem', color: 'var(--coral)', marginTop: 4 }}>
-                            ⚡ Only {spotsLeft} spot{spotsLeft > 1 ? 's' : ''} left!
-                          </p>
+                        {statusBadge && (
+                          <span style={{
+                            padding: '4px 10px',
+                            borderRadius: 20,
+                            background: statusBadge.bg,
+                            color: statusBadge.color,
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                          }}>
+                            {statusBadge.text}
+                          </span>
                         )}
-                      </>
-                    ) : (
-                      <div style={{
-                        padding: '20px',
-                        background: 'var(--coral-pale)',
-                        borderRadius: 20,
-                      }}>
-                        <div style={{ fontSize: '2rem', marginBottom: 8 }}>✨</div>
-                        <p style={{ fontWeight: 600, color: 'var(--coral)', fontSize: '0.85rem', marginBottom: 4 }}>
-                          Be the first to join!
-                        </p>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-mid)' }}>
-                          Start the vibe for this meetup
-                        </p>
                       </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Link>
-          )}
 
-          {/* REST OF UPCOMING */}
-          <EventList events={restUpcoming} loading={loading} />
+                      {/* Titre */}
+                      <h3 style={{
+                        fontSize: '1rem',
+                        fontWeight: 700,
+                        marginBottom: 8,
+                        color: 'var(--text)',
+                        lineHeight: 1.3,
+                      }}>
+                        {event.title || event.meetingPoint || event.location_name || `${event.type} in ${event.city}`}
+                      </h3>
+
+                      {/* Host */}
+                      {host && (
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-mid)', marginBottom: 12 }}>
+                          👤 {host.name}
+                        </p>
+                      )}
+
+                      {/* Participants avatars + count */}
+                      {participantCount > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                          <div style={{ display: 'flex' }}>
+                            {avatars.slice(0, 3).map((p, idx) => (
+                              <div
+                                key={p.id}
+                                style={{
+                                  width: 24, height: 24, borderRadius: '50%',
+                                  background: 'var(--coral-pale)',
+                                  border: '2px solid #fff',
+                                  marginLeft: idx === 0 ? 0 : -8,
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '0.6rem', fontWeight: 700, color: 'var(--coral)',
+                                }}
+                                title={p.name}
+                              >
+                                {p.name?.[0] || '👤'}
+                              </div>
+                            ))}
+                          </div>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-mid)' }}>
+                            {participantCount} going
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Ville */}
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 8 }}>
+                        📍 {event.city}
+                      </p>
+
+                      {/* Date */}
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 16 }}>
+                        🕒 {formatEventDate(event.startAt)}
+                      </p>
+
+                      {/* Footer: spots left + CTA */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginTop: 'auto',
+                        paddingTop: 12,
+                        borderTop: '1px solid var(--border)'
+                      }}>
+                        <span style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          color: isFull ? 'var(--text-muted)' : 'var(--coral)',
+                        }}>
+                          {isFull ? 'Full' : getSpotsRemainingText(participantCount, capacity)}
+                        </span>
+                        {!isFull && (
+                          <span style={{
+                            background: 'var(--coral)',
+                            color: '#fff',
+                            padding: '6px 16px',
+                            borderRadius: 40,
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                          }}>
+                            Join ${event.price ?? 2} →
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
         </section>
 
         {/* SECTION 2: PAST EVENTS */}
@@ -441,20 +414,17 @@ export default function EventsPage() {
             </h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {filteredPast.map(event => {
-                const rawDate = event.time || event.dateTime
-                const eventDate = rawDate?.toDate ? rawDate.toDate() : new Date(rawDate)
-                const isValidDate = eventDate instanceof Date && !isNaN(eventDate.getTime())
-                
-                const participants = event.participants_count ?? 0
+                const eventDate = event.startAt ? new Date(event.startAt) : null
+                const isValidDate = eventDate && !isNaN(eventDate.getTime())
+                const maxCapacity = event.capacity_max ?? 9
                 const cityName = event.city || ''
-                const venueName = event.venue || event.location_name || ''
-                const meetingPoint = event.meetingPoint || ''
+                const title = event.title || event.description?.substring(0, 50) || `${event.type} meetup`
                 const type = event.type || 'meetup'
                 const typeLabel = EVENT_FILTERS.find(f => f.toLowerCase() === type) || 'Meetup'
                 const host = hosts[event.host_id || event.hostId]
-                
-                const month = isValidDate ? eventDate.toLocaleString('en-US', { month: 'short' }) : '—'
-                const day = isValidDate ? eventDate.toLocaleString('en-US', { day: 'numeric' }) : '—'
+                const month = isValidDate ? eventDate.toLocaleString('en-US', { month: 'short' }) : '---'
+                const day = isValidDate ? eventDate.toLocaleString('en-US', { day: 'numeric' }) : '--'
+                const simpleDate = isValidDate ? `${day} ${month}` : 'Date unknown'
 
                 return (
                   <div
@@ -463,29 +433,36 @@ export default function EventsPage() {
                       display: 'flex',
                       gap: 20,
                       alignItems: 'center',
-                      background: '#fff',
+                      background: '#f9f9f9',
                       border: '1px solid var(--border)',
                       borderRadius: 20,
                       padding: 20,
                       cursor: 'default',
-                      transition: 'all 0.2s',
                     }}
                   >
                     <div style={{
-                      width: 64,
-                      height: 64,
+                      width: 56,
+                      height: 56,
                       borderRadius: '50%',
-                      border: '1px solid var(--border)',
+                      background: '#f0f0f0',
+                      border: '2px solid #ccc',
                       display: 'flex',
-                      flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontWeight: 700,
+                      overflow: 'hidden',
                       flexShrink: 0,
-                      background: 'var(--bg-soft)'
                     }}>
-                      <div style={{ fontSize: 12, color: 'var(--text-mid)', textTransform: 'uppercase' }}>{month}</div>
-                      <div style={{ fontSize: 20, color: 'var(--text)' }}>{day}</div>
+                      <Image
+                        src="/past.png"
+                        alt="Past event"
+                        width={56}
+                        height={56}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
                     </div>
 
                     <div style={{ flex: 1 }}>
@@ -500,36 +477,34 @@ export default function EventsPage() {
                         }}>
                           {typeLabel}
                         </span>
-                        <span style={{
-                          fontSize: '0.7rem',
-                          color: 'var(--text-mid)'
-                        }}>
-                          {cityName}
-                        </span>
                       </div>
                       
-                      <h3 style={{ margin: '0 0 6px 0', fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>
-                        {meetingPoint || venueName || `${typeLabel} meetup`}
+                      <h3 style={{ margin: '0 0 4px 0', fontSize: '0.95rem', fontWeight: 700, color: 'var(--text)' }}>
+                        {title}
                       </h3>
                       
                       {host && (
-                        <p style={{ margin: '0 0 4px 0', color: 'var(--text-mid)', fontSize: '0.7rem' }}>
-                          👤 Hosted by {host.name}
+                        <p style={{ margin: '0 0 4px 0', color: 'var(--text-mid)', fontSize: '0.65rem' }}>
+                          👤 {host.name}
                         </p>
                       )}
                       
                       {event.description && (
-                        <p style={{ margin: '0 0 4px 0', color: 'var(--text-muted)', fontSize: '0.7rem', fontStyle: 'italic' }}>
-                          "{event.description.substring(0, 80)}..."
+                        <p style={{ margin: '0 0 6px 0', color: 'var(--text-muted)', fontSize: '0.65rem', fontStyle: 'italic' }}>
+                          "{event.description.substring(0, 70)}..."
                         </p>
                       )}
 
-                      <p style={{ margin: '0 0 4px 0', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                        {isValidDate ? eventDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Date unknown'}
+                      <p style={{ margin: '0 0 4px 0', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                        📍 {cityName}
                       </p>
 
-                      <p style={{ margin: 0, color: 'var(--coral)', fontWeight: 600, fontSize: '0.8rem' }}>
-                        👥 {participants} attended
+                      <p style={{ margin: '0 0 4px 0', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                        📅 {simpleDate}
+                      </p>
+
+                      <p style={{ margin: 0, color: 'var(--coral)', fontWeight: 600, fontSize: '0.75rem' }}>
+                        🎉 {maxCapacity} attended
                       </p>
                     </div>
                   </div>

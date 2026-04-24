@@ -55,7 +55,6 @@ export async function POST(req) {
           return new Response('ok', { status: 200 })
         }
 
-        // 🔥 Mettre à jour le meetup existant (status: pending → paid)
         await meetupRef.update({
           status: 'paid',
           paymentStatus: 'paid',
@@ -83,8 +82,8 @@ export async function POST(req) {
 
           const meetup = meetupSnap.data()
           
-          // 🔥 Vérifier que l'event est bien payé
-          if (meetup.status !== 'paid' && meetup.status !== 'open') {
+          // 🔥 SIMPLIFIÉ : on vérifie seulement que l'event est payé
+          if (meetup.status !== 'paid') {
             throw new Error('MEETUP_NOT_AVAILABLE')
           }
 
@@ -97,7 +96,7 @@ export async function POST(req) {
 
           // Vérifier doublon de session Stripe
           const duplicateQuery = adminDb
-            .collection('participants')
+            .collection('meetup_participants')
             .where('event_id', '==', eventId)
             .where('stripe_session_id', '==', session.id)
 
@@ -110,7 +109,7 @@ export async function POST(req) {
 
           // Vérifier que l'utilisateur n'a pas déjà rejoint
           const userExistingQuery = adminDb
-            .collection('participants')
+            .collection('meetup_participants')
             .where('event_id', '==', eventId)
             .where('user_id', '==', userId)
 
@@ -121,17 +120,15 @@ export async function POST(req) {
           }
 
           const newCount = currentParticipants + 1
-          let newStatus = 'open'
-          if (newCount >= meetupLimit) newStatus = 'full'
-          else if (newCount >= 6) newStatus = 'confirmed'
 
+          // 🔥 ON NE TOUCHE PAS AU STATUS - on garde 'paid'
           tx.update(meetupRef, {
             participants_count: newCount,
-            status: newStatus,
             updatedAt: adminFieldValue.serverTimestamp(),
           })
 
-          const participantRef = adminDb.collection('participants').doc()
+          // Ajouter le participant
+          const participantRef = adminDb.collection('meetup_participants').doc()
           tx.set(participantRef, {
             user_id: userId,
             user_name: userName || '',
