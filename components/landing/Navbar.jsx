@@ -1,99 +1,129 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { onAuthChange, signOut } from '@/lib/auth'
+import { onAuthChange } from '@/lib/auth'
 
 export default function Navbar() {
-  const [user, setUser]         = useState(null)
+  const [user, setUser] = useState(null)
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
     const unsub = onAuthChange(setUser)
     const onScroll = () => setScrolled(window.scrollY > 20)
     window.addEventListener('scroll', onScroll)
-    return () => { unsub(); window.removeEventListener('scroll', onScroll) }
+    return () => {
+      unsub()
+      window.removeEventListener('scroll', onScroll)
+    }
   }, [])
+
+  const linkStyle = {
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    color: 'var(--text-mid)',
+    textDecoration: 'none',
+    padding: '8px 10px',
+    whiteSpace: 'nowrap',
+  }
+
+  const navHeight = 'clamp(60px, 8vw, 74px)'
 
   return (
     <nav style={{
-      position:       'fixed',
-      top:            0, left: 0, right: 0,
-      zIndex:         200,
-      display:        'flex',
-      justifyContent: 'space-between',
-      alignItems:     'center',
-      padding:        '0 5%',
-      height:         '64px',
-      background:     scrolled ? 'rgba(255,255,255,0.95)' : 'transparent',
-      backdropFilter: scrolled ? 'blur(16px)' : 'none',
-      borderBottom:   scrolled ? '1px solid var(--border)' : 'none',
-      transition:     'all 0.3s',
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 200,
+      width: '100%',
+      height: navHeight,
+      background: scrolled ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.92)',
+      backdropFilter: 'blur(16px)',
+      borderBottom: scrolled ? '1px solid var(--border)' : '1px solid rgba(0,0,0,0.04)',
+      boxSizing: 'border-box',
     }}>
-      <Link href="/">
-        <img 
-          src="/logo.png"
-          alt="Ronda"
-          style={{
-            height: 177,
-            cursor: 'pointer'
-          }}
-        />
-      </Link>
+      <div style={{
+        width: '100%',
+        maxWidth: '1200px',
+        margin: '0 auto',
+        padding: '0 clamp(14px, 5vw, 40px)',
+        height: navHeight,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+      }}>
+        <Link href="/" style={{
+          display: 'flex',
+          alignItems: 'center',
+          minWidth: 0,
+          flexShrink: 1,
+        }}>
+          <img
+            src="/logo.png"
+            alt="Ronda"
+            style={{
+              height: 'clamp(34px, 4vw, 48px)',
+              width: 'auto',
+              maxWidth: '170px',
+              objectFit: 'contain',
+              cursor: 'pointer',
+              display: 'block',
+            }}
+          />
+        </Link>
 
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        {user ? (
-          <>
-            <Link href="/events" style={{
-              fontSize: '0.875rem', fontWeight: 500,
-              color: 'var(--text-mid)', textDecoration: 'none',
-              padding: '8px 14px',
-            }}>
-              Events
-            </Link>
-            <Link href="/create" style={{
-              fontSize: '0.875rem', fontWeight: 500,
-              color: 'var(--text-mid)', textDecoration: 'none',
-              padding: '8px 14px',
-            }}>
-              Host
-            </Link>
-            <Link href="/profile" style={{
-              width: 34, height: 32, borderRadius: '50%',
-              background: user.photoURL ? 'transparent' : 'var(--coral)',
-              backgroundImage: user.photoURL ? `url(${user.photoURL})` : 'none',
-              backgroundSize: 'cover',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontWeight: 700, fontSize: '0.8rem',
-              textDecoration: 'none',
-            }}>
-              {!user.photoURL && user.displayName?.[0]}
-            </Link>
-          </>
-        ) : (
-          <>
-            <Link href="/events" style={{
-              fontSize: '0.875rem', fontWeight: 500,
-              color: 'var(--text-mid)', textDecoration: 'none',
-              padding: '8px 14px',
-            }}>
-              Events
-            </Link>
+        <div style={{
+          display: 'flex',
+          gap: '4px',
+          alignItems: 'center',
+          flexShrink: 0,
+        }}>
+          <Link href="/events" style={linkStyle}>Events</Link>
+
+          {user ? (
+            <>
+              <Link href="/create" style={linkStyle}>Host</Link>
+
+              <Link href="/profile" style={{
+                width: 36,
+                height: 36,
+                minWidth: 36,
+                borderRadius: '50%',
+                background: user.photoURL ? 'transparent' : 'var(--coral)',
+                backgroundImage: user.photoURL ? `url(${user.photoURL})` : 'none',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                textDecoration: 'none',
+                marginLeft: 4,
+              }}>
+                {!user.photoURL && (user.displayName?.[0] || 'U')}
+              </Link>
+            </>
+          ) : (
             <Link href="/login" style={{
-              background:     'var(--coral)',
-              color:          '#fff',
-              border:         'none',
-              padding:        '9px 22px',
-              borderRadius:   'var(--radius-pill)',
-              fontFamily:     'var(--font-body)',
-              fontWeight:     600,
-              fontSize:       '0.875rem',
+              background: 'var(--coral)',
+              color: '#fff',
+              padding: '9px 14px',
+              borderRadius: 'var(--radius-pill)',
+              fontFamily: 'var(--font-body)',
+              fontWeight: 600,
+              fontSize: '0.85rem',
               textDecoration: 'none',
-              transition:     'all 0.2s',
+              whiteSpace: 'nowrap',
+              marginLeft: 4,
             }}>
-              Join tonight →
+              Join
             </Link>
-          </>
-        )}
+          )}
+        </div>
       </div>
     </nav>
   )

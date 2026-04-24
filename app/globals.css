@@ -1,39 +1,51 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,700;0,900;1,300;1,700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
+/* ── FIX NAVBAR MOBILE ── */
+main {
+  padding-top: clamp(60px, 8vw, 74px);
+}
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ── VARIABLES ── */
 :root {
-  /* Brand */
   --coral: #FF6B51;
   --coral-hover: #E85A40;
   --coral-pale: #FFF1EE;
   --coral-border: rgba(255, 107, 81, 0.2);
   --coral-shadow: 0 8px 28px rgba(255, 107, 81, 0.32);
 
-  /* Backgrounds */
   --bg: #FFFFFF;
   --bg-soft: #FAFAF9;
   --bg-card: #FFFFFF;
 
-  /* Text */
   --text: #1C1917;
   --text-mid: #44403C;
   --text-muted: #78716C;
 
-  /* Borders & shadows */
   --border: #E7E5E4;
   --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.09);
 
-  /* Typography */
   --font-display: 'Fraunces', serif;
   --font-body: 'DM Sans', sans-serif;
 
-  /* Radius */
   --radius-sm: 10px;
   --radius-md: 16px;
   --radius-lg: 20px;
   --radius-pill: 9999px;
 }
 
+/* ── RESET ── */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -52,7 +64,7 @@ body {
   overflow-x: hidden;
 }
 
-/* ── Typography utilities ── */
+/* ── TYPO ── */
 .font-display { font-family: var(--font-display); }
 
 h1, h2, h3 {
@@ -60,19 +72,19 @@ h1, h2, h3 {
   letter-spacing: -0.5px;
 }
 
-/* ── Focus ring ── */
+/* ── FOCUS ── */
 :focus-visible {
   outline: 2px solid var(--coral);
   outline-offset: 2px;
 }
 
-/* ── Scrollbar ── */
+/* ── SCROLLBAR ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-/* ── Animations ── */
+/* ── ANIMATIONS ── */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(20px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -98,7 +110,7 @@ h1, h2, h3 {
 .animate-pulse    { animation: pulse 1.5s ease infinite; }
 .animate-marquee  { animation: marquee 24s linear infinite; }
 
-/* ── Delay utilities ── */
+/* ── DELAYS ── */
 .delay-1 { animation-delay: 0.1s; }
 .delay-2 { animation-delay: 0.2s; }
 .delay-3 { animation-delay: 0.3s; }
