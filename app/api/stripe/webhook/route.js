@@ -50,7 +50,6 @@ export async function POST(req) {
         const meetupRef = adminDb.collection('meetups').doc(meetupId)
         const meetupSnap = await meetupRef.get()
 
-        // 🔥 CORRECTION: .exists (pas .exists())
         if (!meetupSnap.exists) {
           console.error('❌ Meetup not found:', meetupId)
           return new Response('ok', { status: 200 })
@@ -68,80 +67,82 @@ export async function POST(req) {
         console.log('🔥 MEETUP MARKED AS PAID:', meetupId)
       }
 
-      // 🔥 FLUX 2: JOIN_EVENT - réservation dans meetups
+      // 🔥 FLUX 2: JOIN_EVENT - réservation dans meetups (SANS TRANSACTION)
       if (checkoutType === 'join_event') {
         const { userId, eventId, userName } = metadata
 
+        console.log('📝 Processing join_event for eventId:', eventId)
+
         const meetupRef = adminDb.collection('meetups').doc(eventId)
+        const meetupSnap = await meetupRef.get()
 
-        await adminDb.runTransaction(async (tx) => {
-          const meetupSnap = await tx.get(meetupRef)
+        if (!meetupSnap.exists) {
+          console.error('❌ Meetup not found:', eventId)
+          return new Response('ok', { status: 200 })
+        }
 
-          // 🔥 CORRECTION: .exists (pas .exists())
-          if (!meetupSnap.exists) {
-            throw new Error('MEETUP_NOT_FOUND')
-          }
+        const meetup = meetupSnap.data()
+        
+        if (meetup.status !== 'paid') {
+          console.error('❌ Meetup not paid:', meetup.status)
+          return new Response('ok', { status: 200 })
+        }
 
-          const meetup = meetupSnap.data()
-          
-          if (meetup.status !== 'paid') {
-            throw new Error('MEETUP_NOT_AVAILABLE')
-          }
+        const meetupLimit = meetup.capacity_max || meetup.capacity || 9
+        const currentParticipants = meetup.participants_count || 0
 
-          const meetupLimit = meetup.capacity_max || meetup.capacity || 9
-          const currentParticipants = meetup.participants_count || 0
+        if (currentParticipants >= meetupLimit) {
+          console.error('❌ Meetup full:', currentParticipants, '/', meetupLimit)
+          return new Response('ok', { status: 200 })
+        }
 
-          if (currentParticipants >= meetupLimit) {
-            throw new Error('MEETUP_FULL')
-          }
+        // Vérifier doublon de session Stripe
+        const duplicateQuery = await adminDb
+          .collection('meetup_participants')
+          .where('event_id', '==', eventId)
+          .where('stripe_session_id', '==', session.id)
+          .get()
 
-          const duplicateQuery = adminDb
-            .collection('meetup_participants')
-            .where('event_id', '==', eventId)
-            .where('stripe_session_id', '==', session.id)
+        if (!duplicateQuery.empty) {
+          console.log('⚠️ Duplicate webhook, skipping')
+          return new Response('ok', { status: 200 })
+        }
 
-          const duplicateSnap = await tx.get(duplicateQuery)
+        // Vérifier que l'utilisateur n'a pas déjà rejoint
+        const userExistingQuery = await adminDb
+          .collection('meetup_participants')
+          .where('event_id', '==', eventId)
+          .where('user_id', '==', userId)
+          .get()
 
-          if (!duplicateSnap.empty) {
-            console.log('⚠️ Duplicate webhook, skipping')
-            return
-          }
+        if (!userExistingQuery.empty) {
+          console.error('❌ User already joined:', userId)
+          return new Response('ok', { status: 200 })
+        }
 
-          const userExistingQuery = adminDb
-            .collection('meetup_participants')
-            .where('event_id', '==', eventId)
-            .where('user_id', '==', userId)
+        const newCount = currentParticipants + 1
 
-          const userExistingSnap = await tx.get(userExistingQuery)
-
-          if (!userExistingSnap.empty) {
-            throw new Error('ALREADY_JOINED')
-          }
-
-          const newCount = currentParticipants + 1
-
-          tx.update(meetupRef, {
-            participants_count: newCount,
-            updatedAt: adminFieldValue.serverTimestamp(),
-          })
-
-          const participantRef = adminDb.collection('meetup_participants').doc()
-          tx.set(participantRef, {
-            user_id: userId,
-            user_name: userName || '',
-            event_id: eventId,
-            status: 'joined',
-            stripe_session_id: session.id,
-            paid_at: adminFieldValue.serverTimestamp(),
-            created_at: adminFieldValue.serverTimestamp(),
-          })
-
-          console.log(`✅ JOIN CONFIRMED: meetup ${eventId} → ${newCount}/${meetupLimit} participants`)
+        // ✅ Incrémenter participants_count
+        await meetupRef.update({
+          participants_count: newCount,
+          updatedAt: adminFieldValue.serverTimestamp(),
         })
+
+        // ✅ Ajouter le participant
+        await adminDb.collection('meetup_participants').add({
+          user_id: userId,
+          user_name: userName || '',
+          event_id: eventId,
+          status: 'joined',
+          stripe_session_id: session.id,
+          paid_at: adminFieldValue.serverTimestamp(),
+          created_at: adminFieldValue.serverTimestamp(),
+        })
+
+        console.log(`✅ JOIN CONFIRMED: meetup ${eventId} → ${newCount}/${meetupLimit} participants`)
       }
 
     } catch (err) {
-      // 🔥 CORRECTION: meilleur log d'erreur
       console.error('💥 Webhook error:', err.message)
       console.error('💥 Webhook stack:', err.stack)
       return new Response('ok', { status: 200 })
