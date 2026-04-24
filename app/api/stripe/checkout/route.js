@@ -15,11 +15,6 @@ export async function POST(request) {
     console.log('[Checkout] userId =', userId)
     console.log('[Checkout] eventId =', eventId)
     console.log('[Checkout] has eventData =', !!eventData)
-    console.log('[Checkout] NEXT_PUBLIC_APP_URL =', process.env.NEXT_PUBLIC_APP_URL)
-    console.log('[Checkout] STRIPE_SECRET_KEY exists =', !!process.env.STRIPE_SECRET_KEY)
-    console.log('[Checkout] FIREBASE_PROJECT_ID exists =', !!process.env.FIREBASE_PROJECT_ID)
-    console.log('[Checkout] FIREBASE_CLIENT_EMAIL exists =', !!process.env.FIREBASE_CLIENT_EMAIL)
-    console.log('[Checkout] FIREBASE_PRIVATE_KEY exists =', !!process.env.FIREBASE_PRIVATE_KEY)
 
     if (!type || !userId) {
       return Response.json({ error: 'Missing required fields' }, { status: 400 })
@@ -31,7 +26,7 @@ export async function POST(request) {
       return Response.json({ error: 'Missing NEXT_PUBLIC_APP_URL' }, { status: 500 })
     }
 
-    // HOST
+    // 🔥 FLUX 1: HOST - Créer un événement (status: pending)
     if (type === 'host') {
       if (!eventData) {
         return Response.json({ error: 'Missing eventData' }, { status: 400 })
@@ -41,46 +36,35 @@ export async function POST(request) {
 
       await meetupRef.set({
         id: meetupRef.id,
-
         hostId: userId,
-
         type: eventData.type || 'outing',
         title: eventData.title || `${eventData.type || 'Event'} in ${eventData.city || ''}`,
         description: eventData.description || '',
-
         city: eventData.city || '',
         meetingPoint: eventData.meetingPoint || '',
         venue: eventData.venue || '',
         location_name: eventData.location_name || eventData.meetingPoint || '',
-
         startAt: eventData.startAt || eventData.time || '',
-
         coordinates: eventData.coordinates || null,
-
         capacity: Number(eventData.capacity) || 9,
         capacity_min: Number(eventData.capacity_min) || 6,
         capacity_max: Number(eventData.capacity_max) || 9,
         participants_count: 0,
-
         price: 2,
         currency: 'usd',
-
         status: 'pending',
         paymentStatus: 'pending',
-
         stripeSessionId: '',
         stripePaymentIntent: '',
-
         createdAt: adminFieldValue.serverTimestamp(),
         updatedAt: adminFieldValue.serverTimestamp(),
       })
 
-      console.log('[Checkout] Meetup created in meetups with pending status:', {
+      console.log('[Checkout] Meetup created with pending status:', {
         id: meetupRef.id,
         city: eventData.city,
         meetingPoint: eventData.meetingPoint,
-        venue: eventData.venue,
-        hasCoordinates: !!eventData.coordinates,
+        title: eventData.title,
       })
 
       const session = await stripe.checkout.sessions.create({
@@ -112,47 +96,41 @@ export async function POST(request) {
       return Response.json({ url: session.url })
     }
 
-    // JOIN
+    // 🔥 FLUX 2: JOIN - Réserver une place
     if (type === 'join') {
       if (!eventId) {
         return Response.json({ error: 'Missing eventId' }, { status: 400 })
       }
 
-      console.log('[Checkout] Looking up meetup in collection "meetups" with id:', eventId)
+      console.log('[Checkout] Looking up meetup:', eventId)
 
       const meetupRef = adminDb.collection('meetups').doc(eventId)
       const meetupSnap = await meetupRef.get()
-
-      console.log('[Checkout] meetup exists =', meetupSnap.exists)
 
       if (!meetupSnap.exists) {
         return Response.json({ error: 'Event not found' }, { status: 404 })
       }
 
       const meetup = meetupSnap.data()
+      
+      // 🔥 CORRECTION 2: seulement 'paid' (plus 'open')
+      if (meetup.status !== 'paid') {
+        return Response.json({ error: 'Event is not available' }, { status: 400 })
+      }
+
       const meetupLimit = meetup.capacity_max || meetup.capacity || 9
       const currentParticipants = meetup.participants_count || 0
-
-      console.log('[Checkout] meetup data summary:', {
-        title: meetup.title,
-        type: meetup.type,
-        city: meetup.city,
-        capacity_max: meetup.capacity_max,
-        capacity: meetup.capacity,
-        participants_count: meetup.participants_count,
-      })
 
       if (currentParticipants >= meetupLimit) {
         return Response.json({ error: 'Event is full' }, { status: 400 })
       }
 
+      // 🔥 CORRECTION 1: participants → meetup_participants
       const existingParticipantQuery = await adminDb
-        .collection('participants')
+        .collection('meetup_participants')
         .where('event_id', '==', eventId)
         .where('user_id', '==', userId)
         .get()
-
-      console.log('[Checkout] existing participant docs =', existingParticipantQuery.size)
 
       if (!existingParticipantQuery.empty) {
         return Response.json({ error: 'Already joined' }, { status: 400 })
@@ -190,8 +168,7 @@ export async function POST(request) {
 
     return Response.json({ error: 'Invalid type' }, { status: 400 })
   } catch (err) {
-    console.error('[Stripe Checkout] Full error object:', err)
-    console.error('[Stripe Checkout] Message:', err?.message)
+    console.error('[Stripe Checkout] Error:', err?.message)
     console.error('[Stripe Checkout] Stack:', err?.stack)
 
     return Response.json(
