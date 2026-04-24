@@ -195,6 +195,96 @@ export default function ProfilePage() {
             </Button>
           )}
 
+          {/* 🔥 My latest events */}
+          <div style={{
+            background: '#fff',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '22px',
+            marginBottom: '24px',
+          }}>
+            <h2 style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: '1.25rem',
+              fontWeight: 900,
+              color: 'var(--text)',
+              marginBottom: '14px',
+            }}>
+              My latest events
+            </h2>
+
+            {events.length === 0 ? (
+              <p style={{
+                fontSize: '0.9rem',
+                color: 'var(--text-muted)',
+              }}>
+                You haven't joined any event yet.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {events.slice(0, 10).map(item => {
+                  const ev = item.event
+                  const eventDate = ev?.startAt ? new Date(ev.startAt) : null
+                  const isPast = eventDate && eventDate < new Date()
+
+                  return (
+                    <Link
+                      key={item.id}
+                      href={`/events/${ev.id}`}
+                      style={{
+                        display: 'block',
+                        textDecoration: 'none',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        padding: '14px',
+                        background: 'var(--bg-soft)',
+                      }}
+                    >
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        alignItems: 'flex-start',
+                      }}>
+                        <div>
+                          <p style={{
+                            fontWeight: 700,
+                            color: 'var(--text)',
+                            fontSize: '0.95rem',
+                            marginBottom: '4px',
+                          }}>
+                            {ev.title || `${ev.type} in ${ev.city}`}
+                          </p>
+
+                          <p style={{
+                            fontSize: '0.82rem',
+                            color: 'var(--text-muted)',
+                            lineHeight: 1.5,
+                          }}>
+                            📍 {ev.city}<br />
+                            ⏰ {eventDate ? eventDate.toLocaleString() : 'Date TBD'}
+                          </p>
+                        </div>
+
+                        <span style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          color: isPast ? 'var(--text-muted)' : 'var(--coral)',
+                          background: isPast ? '#F5F5F4' : 'var(--coral-pale)',
+                          borderRadius: 'var(--radius-pill)',
+                          padding: '5px 9px',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {isPast ? 'Past' : 'Upcoming'}
+                        </span>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Actions */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <Link href="/events" style={{
