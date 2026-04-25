@@ -50,9 +50,29 @@ export async function POST(req) {
         const meetupRef = adminDb.collection('meetups').doc(meetupId)
         const meetupSnap = await meetupRef.get()
 
+        // ✅ CORRECTION: .exists (pas .exists())
         if (!meetupSnap.exists) {
           console.error('❌ Meetup not found:', meetupId)
           return new Response('ok', { status: 200 })
+        }
+
+        // Incrémenter events_hosted dans ronda_users
+        const userRef = adminDb.collection('ronda_users').doc(userId)
+        const userSnap = await userRef.get()
+        
+        // ✅ CORRECTION: .exists (pas .exists())
+        if (userSnap.exists) {
+          await userRef.update({
+            events_hosted: adminFieldValue.increment(1),
+            updatedAt: adminFieldValue.serverTimestamp(),
+          })
+        } else {
+          await userRef.set({
+            events_hosted: 1,
+            events_attended: 0,
+            createdAt: adminFieldValue.serverTimestamp(),
+            updatedAt: adminFieldValue.serverTimestamp(),
+          })
         }
 
         await meetupRef.update({
@@ -67,7 +87,7 @@ export async function POST(req) {
         console.log('🔥 MEETUP MARKED AS PAID:', meetupId)
       }
 
-      // 🔥 FLUX 2: JOIN_EVENT - réservation dans meetups (SANS TRANSACTION)
+      // 🔥 FLUX 2: JOIN_EVENT - réservation dans meetups
       if (checkoutType === 'join_event') {
         const { userId, eventId, userName } = metadata
 
@@ -76,6 +96,7 @@ export async function POST(req) {
         const meetupRef = adminDb.collection('meetups').doc(eventId)
         const meetupSnap = await meetupRef.get()
 
+        // ✅ CORRECTION: .exists (pas .exists())
         if (!meetupSnap.exists) {
           console.error('❌ Meetup not found:', eventId)
           return new Response('ok', { status: 200 })
@@ -96,6 +117,18 @@ export async function POST(req) {
           return new Response('ok', { status: 200 })
         }
 
+        // IDEMPOTENCY: Vérifier si déjà traité
+        const existingParticipantQuery = await adminDb
+          .collection('meetup_participants')
+          .where('event_id', '==', eventId)
+          .where('user_id', '==', userId)
+          .get()
+
+        if (!existingParticipantQuery.empty) {
+          console.log('⚠️ Participant already exists, skipping (idempotency)')
+          return new Response('ok', { status: 200 })
+        }
+
         // Vérifier doublon de session Stripe
         const duplicateQuery = await adminDb
           .collection('meetup_participants')
@@ -108,38 +141,56 @@ export async function POST(req) {
           return new Response('ok', { status: 200 })
         }
 
-        // Vérifier que l'utilisateur n'a pas déjà rejoint
-        const userExistingQuery = await adminDb
-          .collection('meetup_participants')
-          .where('event_id', '==', eventId)
-          .where('user_id', '==', userId)
-          .get()
-
-        if (!userExistingQuery.empty) {
-          console.error('❌ User already joined:', userId)
-          return new Response('ok', { status: 200 })
-        }
-
         const newCount = currentParticipants + 1
 
-        // ✅ Incrémenter participants_count
+        // Incrémenter participants_count
         await meetupRef.update({
           participants_count: newCount,
           updatedAt: adminFieldValue.serverTimestamp(),
         })
 
-        // ✅ Ajouter le participant
-        await adminDb.collection('meetup_participants').add({
+        // Incrémenter events_attended dans ronda_users
+        const userRef = adminDb.collection('ronda_users').doc(userId)
+        const userSnap = await userRef.get()
+        
+        // ✅ CORRECTION: .exists (pas .exists())
+        if (userSnap.exists) {
+          await userRef.update({
+            events_attended: adminFieldValue.increment(1),
+            updatedAt: adminFieldValue.serverTimestamp(),
+          })
+        } else {
+          await userRef.set({
+            events_attended: 1,
+            events_hosted: 0,
+            createdAt: adminFieldValue.serverTimestamp(),
+            updatedAt: adminFieldValue.serverTimestamp(),
+          })
+        }
+
+        const priceAmount = meetup.price || 2
+
+        // Ajouter le participant avec toutes les infos Stripe
+        const participantData = {
           user_id: userId,
           user_name: userName || '',
           event_id: eventId,
           status: 'joined',
           stripe_session_id: session.id,
+          stripe_payment_intent: session.payment_intent,
+          amount_paid: priceAmount,
+          currency: 'usd',
+          refund_status: 'none',
+          refund_amount: 0,
           paid_at: adminFieldValue.serverTimestamp(),
           created_at: adminFieldValue.serverTimestamp(),
-        })
+        }
+
+        await adminDb.collection('meetup_participants').add(participantData)
 
         console.log(`✅ JOIN CONFIRMED: meetup ${eventId} → ${newCount}/${meetupLimit} participants`)
+        console.log(`💳 Payment intent: ${session.payment_intent}, amount: ${priceAmount}`)
+        console.log(`📊 User ${userId} events_attended incremented`)
       }
 
     } catch (err) {

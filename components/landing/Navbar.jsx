@@ -81,17 +81,20 @@ export default function Navbar() {
           flexShrink: 0,
         }}>
           <Link href="/events" style={linkStyle}>Events</Link>
+          
+          {/* 🔥 NOUVEAU LIEN MEMBERS */}
+          <Link href="/members" style={linkStyle}>Members</Link>
 
           {user ? (
             <>
               <Link href="/create" style={linkStyle}>Host</Link>
 
               <Link href="/profile" style={{
-                width: 36,
-                height: 36,
-                minWidth: 36,
+                width: 34,
+                height: 34,
+                minWidth: 34,
                 borderRadius: '50%',
-                background: user.photoURL ? 'transparent' : 'var(--coral)',
+                background: 'var(--coral)',
                 backgroundImage: user.photoURL ? `url(${user.photoURL})` : 'none',
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
@@ -103,8 +106,10 @@ export default function Navbar() {
                 fontSize: '0.8rem',
                 textDecoration: 'none',
                 marginLeft: 4,
+                border: '1px solid var(--coral-border)',
               }}>
-                {!user.photoURL && (user.displayName?.[0] || 'U')}
+                {/* 🔥 FALLBACK: toujours afficher une lettre même si photoURL existe */}
+                {user.displayName?.[0] || user.email?.[0] || 'U'}
               </Link>
             </>
           ) : (

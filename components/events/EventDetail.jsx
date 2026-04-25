@@ -9,6 +9,7 @@ import { updateTrustScore, TRUST_DELTA } from '@/lib/trust'
 import { JoinButton } from './JoinButton'
 import AvatarStack from './AvatarStack'
 import TrustBadge from './TrustBadge'
+import EditEventButton from './EditEventButton'
 
 // Import dynamique de la carte
 const MapComponent = dynamic(() => import('@/components/events/MapComponent'), {
@@ -21,6 +22,8 @@ export default function EventDetail({ event, currentUser }) {
   const [host, setHost] = useState(null)
   const [alreadyJoined, setAlreadyJoined] = useState(false)
   const [markingDone, setMarkingDone] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [isLeaving, setIsLeaving] = useState(false)
 
   // Normalisation des champs
   const hostId = event.hostId || event.host_id
@@ -30,13 +33,31 @@ export default function EventDetail({ event, currentUser }) {
   const eventDate = event.startAt ? new Date(event.startAt) : null
   const isValidDate = eventDate && !isNaN(eventDate.getTime())
   const isPast = isValidDate && eventDate < new Date()
-  const isPaid = event.status === 'paid'
+  const isPaid = event.status === 'paid' || event.status === 'active' || event.status === 'confirmed'
+  const isCancelled = event.status === 'cancelled'
   
   const type = getEventType(event.type)
   const isFull = joinedCount >= limit
   const isHost = currentUser?.uid === hostId
   const spotsLeft = limit - joinedCount
   const confirmed = joinedCount >= CAPACITY_MIN
+
+  // 🔥 Vérifier si l'édition est encore possible (jusqu'à 12h avant)
+  const canEdit = () => {
+    if (!isValidDate) return false
+    if (isPast || isCancelled) return false
+    const hoursBeforeEvent = (eventDate - new Date()) / (1000 * 60 * 60)
+    return hoursBeforeEvent >= 12
+  }
+  const isEditAllowed = canEdit()
+
+  // Calcul du délai pour le message de remboursement
+  const getRefundMessage = () => {
+    if (!eventDate) return ''
+    const diffInHours = (eventDate - new Date()) / (1000 * 60 * 60)
+    if (diffInHours >= 72) return 'Refund: $1 (if cancelled ≥72h before)'
+    return 'Refund: $0 (if cancelled <72h before)'
+  }
 
   // Formatage date
   const formattedDate = isValidDate 
@@ -45,10 +66,12 @@ export default function EventDetail({ event, currentUser }) {
 
   // Badge de statut
   const getStatusBadge = () => {
+    if (isCancelled) return { text: 'Cancelled', color: '#991B1B', bg: '#FEE2E2' }
     if (isPast) return { text: 'Past', color: '#666', bg: '#f0f0f0' }
     if (isFull) return { text: 'Full', color: '#991B1B', bg: '#FEE2E2' }
     if (spotsLeft <= 2) return { text: `Only ${spotsLeft} left`, color: '#92400E', bg: '#FEF3C7' }
-    if (confirmed) return { text: 'Confirmed', color: '#166534', bg: '#DCFCE7' }
+    if (confirmed) return { text: '✓ Confirmed', color: '#166534', bg: '#DCFCE7' }
+    if (joinedCount >= 3) return { text: 'Active', color: '#C43A22', bg: '#FEE8E5' }
     return null
   }
   const statusBadge = getStatusBadge()
@@ -83,8 +106,101 @@ export default function EventDetail({ event, currentUser }) {
     await updateTrustScore(userId, attended ? TRUST_DELTA.ATTENDED : TRUST_DELTA.NO_SHOW)
   }
 
+  async function handleCancelEvent() {
+    const refundMessage = getRefundMessage()
+    const confirmMessage = `Are you sure you want to cancel this event?\n\n${refundMessage}`
+    
+    if (!confirm(confirmMessage)) return
+    
+    setIsCancelling(true)
+    try {
+      const res = await fetch(`/api/events/${event.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser?.uid, isHost: true }),
+      })
+      
+      const data = await res.json()
+      
+      if (data.success) {
+        alert(data.message)
+        window.location.reload()
+      } else {
+        alert(data.error || 'Failed to cancel event')
+      }
+    } catch (err) {
+      console.error('Error cancelling event:', err)
+      alert('Something went wrong')
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
+  async function handleLeaveEvent() {
+    const refundMessage = getRefundMessage()
+    const confirmMessage = `Are you sure you want to leave this event?\n\n${refundMessage}`
+    
+    if (!confirm(confirmMessage)) return
+    
+    setIsLeaving(true)
+    try {
+      const res = await fetch(`/api/events/${event.id}/leave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser?.uid }),
+      })
+      
+      const data = await res.json()
+      
+      if (data.success) {
+        alert(data.message)
+        window.location.reload()
+      } else {
+        alert(data.error || 'Failed to leave event')
+      }
+    } catch (err) {
+      console.error('Error leaving event:', err)
+      alert('Something went wrong')
+    } finally {
+      setIsLeaving(false)
+    }
+  }
+
   const hasCoordinates = event.coordinates?.lat && event.coordinates?.lng
   const mapCenter = hasCoordinates ? [Number(event.coordinates.lat), Number(event.coordinates.lng)] : null
+
+  // Si l'événement est annulé, afficher un message
+  if (isCancelled) {
+    return (
+      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
+        <div style={{
+          background: '#fff',
+          borderRadius: 28,
+          border: '1px solid #FEE2E2',
+          padding: '40px',
+          textAlign: 'center',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+        }}>
+          <div style={{ fontSize: '3rem', marginBottom: 16 }}>🚫</div>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Event Cancelled</h2>
+          <p style={{ color: 'var(--text-mid)' }}>
+            This event has been cancelled. You have been refunded if applicable.
+          </p>
+          <Link href="/events" style={{
+            display: 'inline-block',
+            marginTop: 24,
+            background: 'var(--coral)',
+            color: '#fff',
+            padding: '10px 28px',
+            borderRadius: 40,
+            textDecoration: 'none',
+          }}>
+            Browse other events →
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
@@ -230,39 +346,94 @@ export default function EventDetail({ event, currentUser }) {
         
         {/* CTA Section */}
         <div style={{ padding: '24px 28px 32px 28px', borderTop: '1px solid var(--coral-border)', background: '#fff' }}>
-          {!isHost && isPaid && !isPast && !isFull && !alreadyJoined && (
-            <JoinButton event={event} userId={currentUser?.uid} alreadyJoined={alreadyJoined} isFull={isFull} />
-          )}
           
-          {!isHost && alreadyJoined && (
-            <div style={{
-              padding: '14px 24px',
-              borderRadius: 60,
-              background: '#DCFCE7',
-              color: '#166534',
-              fontWeight: 600,
-              textAlign: 'center',
-              fontSize: '0.9rem',
-            }}>
-              ✓ You're in! See you there.
+          {/* 🔥 HOST: Edit + Cancel buttons */}
+          {isHost && !isPast && !isCancelled && (
+            <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+              {isEditAllowed && (
+                <EditEventButton event={event} userId={currentUser?.uid} />
+              )}
+              <button
+                onClick={handleCancelEvent}
+                disabled={isCancelling}
+                style={{
+                  flex: 1,
+                  padding: '14px 24px',
+                  borderRadius: 60,
+                  background: '#FEE2E2',
+                  color: '#991B1B',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  border: 'none',
+                  cursor: isCancelling ? 'not-allowed' : 'pointer',
+                  opacity: isCancelling ? 0.6 : 1,
+                }}
+              >
+                {isCancelling ? 'Cancelling...' : 'Cancel this event'}
+              </button>
             </div>
           )}
           
-          {!isHost && isFull && !alreadyJoined && isPaid && !isPast && (
-            <div style={{
-              padding: '14px 24px',
-              borderRadius: 60,
-              background: '#FEE2E2',
-              color: '#991B1B',
-              fontWeight: 600,
-              textAlign: 'center',
-              fontSize: '0.9rem',
-            }}>
-              🔴 This event is full
-            </div>
+          {/* PARTICIPANT: Join or Leave button */}
+          {!isHost && !isPast && !isCancelled && (
+            <>
+              {!alreadyJoined && !isFull && isPaid && (
+                <JoinButton event={event} userId={currentUser?.uid} alreadyJoined={alreadyJoined} isFull={isFull} />
+              )}
+              
+              {alreadyJoined && (
+                <>
+                  <div style={{
+                    padding: '14px 24px',
+                    borderRadius: 60,
+                    background: '#DCFCE7',
+                    color: '#166534',
+                    fontWeight: 600,
+                    textAlign: 'center',
+                    fontSize: '0.9rem',
+                    marginBottom: 12,
+                  }}>
+                    ✓ You're in! See you there.
+                  </div>
+                  <button
+                    onClick={handleLeaveEvent}
+                    disabled={isLeaving}
+                    style={{
+                      width: '100%',
+                      padding: '10px 24px',
+                      borderRadius: 60,
+                      background: '#FEE2E2',
+                      color: '#991B1B',
+                      fontWeight: 500,
+                      fontSize: '0.85rem',
+                      border: 'none',
+                      cursor: isLeaving ? 'not-allowed' : 'pointer',
+                      opacity: isLeaving ? 0.6 : 1,
+                    }}
+                  >
+                    {isLeaving ? 'Leaving...' : 'Leave event'}
+                  </button>
+                </>
+              )}
+              
+              {isFull && !alreadyJoined && isPaid && (
+                <div style={{
+                  padding: '14px 24px',
+                  borderRadius: 60,
+                  background: '#FEE2E2',
+                  color: '#991B1B',
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  fontSize: '0.9rem',
+                }}>
+                  🔴 This event is full
+                </div>
+              )}
+            </>
           )}
           
-          {!isHost && isPast && (
+          {/* Past event message */}
+          {isPast && !isCancelled && (
             <div style={{
               padding: '14px 24px',
               borderRadius: 60,
@@ -279,14 +450,14 @@ export default function EventDetail({ event, currentUser }) {
           {/* Refund policy */}
           <div style={{ marginTop: 20, textAlign: 'center' }}>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-              💵 $2 commitment fee · Refunded if cancelled
+              💵 $2 commitment fee · Refunded 50% if cancelled ≥72h before · 0% if less
             </p>
           </div>
         </div>
       </div>
       
       {/* Mark attendance pour host (si applicable) */}
-      {isHost && event.status === 'confirmed' && !markingDone && !isPast && (
+      {isHost && event.status === 'confirmed' && !markingDone && !isPast && !isCancelled && (
         <div style={{
           marginTop: 24,
           background: 'var(--coral-pale)',
@@ -294,7 +465,7 @@ export default function EventDetail({ event, currentUser }) {
           padding: 20,
           border: '1px solid var(--coral-border)',
         }}>
-          <p style={{ fontWeight: 600, marginBottom: 16 }}>Mark attendance</p>
+          <p style={{ fontWeight: 600, marginBottom: 16 }}>Mark attendance after the event</p>
           {participants.map(u => (
             <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <span>{u.name}</span>

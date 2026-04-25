@@ -15,30 +15,29 @@ L.Icon.Default.mergeOptions({
 export default function MapComponent({ center, location, height = '240px' }) {
   const mapRef = useRef(null)
   const markerRef = useRef(null)
+  const containerId = useRef(`map-${Math.random().toString(36).substr(2, 9)}`)
 
   useEffect(() => {
-    if (!mapRef.current && center) {
-      // Initialisation de la carte
-      mapRef.current = L.map('map-preview').setView(center, 15)
-      
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      }).addTo(mapRef.current)
+    // Nettoyer la carte précédente si elle existe
+    if (mapRef.current) {
+      mapRef.current.remove()
+      mapRef.current = null
     }
 
-    if (mapRef.current && center) {
-      // Mise à jour de la position
-      mapRef.current.setView(center, 15)
-      
-      if (markerRef.current) {
-        markerRef.current.remove()
-      }
-      
-      markerRef.current = L.marker(center)
-        .addTo(mapRef.current)
-        .bindPopup(location || 'Meeting point')
-        .openPopup()
-    }
+    if (!center) return
+
+    // Initialisation de la carte avec un ID unique
+    mapRef.current = L.map(containerId.current).setView(center, 15)
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(mapRef.current)
+
+    // Ajout du marqueur
+    markerRef.current = L.marker(center)
+      .addTo(mapRef.current)
+      .bindPopup(location || 'Meeting point')
+      .openPopup()
 
     // Cleanup
     return () => {
@@ -53,7 +52,7 @@ export default function MapComponent({ center, location, height = '240px' }) {
 
   return (
     <div 
-      id="map-preview" 
+      id={containerId.current} 
       style={{ 
         height, 
         width: '100%', 

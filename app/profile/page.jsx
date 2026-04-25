@@ -285,6 +285,34 @@ export default function ProfilePage() {
             )}
           </div>
 
+          {/* 🔥 See all members link */}
+          <div style={{
+            marginBottom: '20px',
+            textAlign: 'center',
+          }}>
+            <Link href="/members" style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              color: 'var(--coral)',
+              fontSize: '0.85rem',
+              fontWeight: 500,
+              textDecoration: 'none',
+              padding: '8px 16px',
+              borderRadius: '40px',
+              border: '1px solid var(--coral-border)',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--coral-pale)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+            }}>
+              👥 See all members →
+            </Link>
+          </div>
+
           {/* Actions */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <Link href="/events" style={{
