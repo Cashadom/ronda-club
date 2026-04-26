@@ -80,9 +80,8 @@ export default function Navbar() {
           alignItems: 'center',
           flexShrink: 0,
         }}>
-          <Link href="/events" style={linkStyle}>Events</Link>
+          {/* 🔥 LIEN EVENTS SUPPRIMÉ */}
           
-          {/* 🔥 NOUVEAU LIEN MEMBERS */}
           <Link href="/members" style={linkStyle}>Members</Link>
 
           {user ? (
@@ -108,7 +107,6 @@ export default function Navbar() {
                 marginLeft: 4,
                 border: '1px solid var(--coral-border)',
               }}>
-                {/* 🔥 FALLBACK: toujours afficher une lettre même si photoURL existe */}
                 {user.displayName?.[0] || user.email?.[0] || 'U'}
               </Link>
             </>

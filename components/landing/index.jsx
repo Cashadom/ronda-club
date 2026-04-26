@@ -478,14 +478,22 @@ export function Footer() {
         ronda
       </div>
       <div style={{ display:'flex', gap:'24px' }}>
-        {['Events','How it works','Host','Terms'].map(l => (
-          <a key={l} href="#" style={{
-            fontSize:'0.85rem', color:'var(--text-muted)',
-            textDecoration:'none',
-          }}>
-            {l}
-          </a>
-        ))}
+        <Link href="/events" style={{
+          fontSize:'0.85rem', color:'var(--text-muted)',
+          textDecoration:'none',
+        }}>Events</Link>
+        <a href="#how-it-works" style={{
+          fontSize:'0.85rem', color:'var(--text-muted)',
+          textDecoration:'none',
+        }}>How it works</a>
+        <Link href="/create" style={{
+          fontSize:'0.85rem', color:'var(--text-muted)',
+          textDecoration:'none',
+        }}>Host</Link>
+        <Link href="/terms" style={{
+          fontSize:'0.85rem', color:'var(--text-muted)',
+          textDecoration:'none',
+        }}>Terms</Link>
       </div>
       <p style={{ fontSize:'0.8rem', color:'var(--text-muted)' }}>
         © 2026 Ronda · Real meetups. Real people.
