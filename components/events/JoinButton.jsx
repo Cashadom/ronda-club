@@ -79,21 +79,40 @@ export function JoinButton({ event, userId, alreadyJoined, isFull }) {
   }
 
   async function handleJoin() {
+    console.log('🟢 [JoinButton] CLICK JOIN - Starting...')
+    console.log('🟢 [JoinButton] userId:', userId)
+    
     if (!userId) {
+      console.log('🟢 [JoinButton] No userId, redirecting to login')
       window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname)
       return
     }
+
+    console.log('🟢 [JoinButton] User OK, calling startCheckout...')
     setLoading(true)
     setError(null)
+    
     try {
       const type = getEventType(event.type)
+      console.log('🟢 [JoinButton] Event type:', type)
+      
+      console.log('🟢 [JoinButton] Calling startCheckout with:', {
+        type: 'join',
+        eventId: event.id,
+        userId,
+        eventData: { type: type.label },
+      })
+      
       await startCheckout({
         type: 'join',
         eventId: event.id,
         userId,
         eventData: { type: type.label },
       })
+      
+      console.log('🟢 [JoinButton] startCheckout completed successfully')
     } catch (err) {
+      console.error('🔴 [JoinButton] ERROR:', err)
       setError(err.message)
       setLoading(false)
     }
@@ -161,19 +180,35 @@ export function HostButton({ eventData, userId }) {
   const [error, setError] = useState(null)
 
   async function handleHost() {
+    console.log('🟢 [HostButton] CLICK HOST - Starting...')
+    console.log('🟢 [HostButton] userId:', userId)
+    
     if (!userId) {
+      console.log('🟢 [HostButton] No userId, redirecting to login')
       window.location.href = '/login?redirect=/create'
       return
     }
+
+    console.log('🟢 [HostButton] User OK, calling startCheckout...')
     setLoading(true)
     setError(null)
+    
     try {
+      console.log('🟢 [HostButton] Calling startCheckout with:', {
+        type: 'host',
+        userId,
+        eventData,
+      })
+      
       await startCheckout({
         type: 'host',
         userId,
         eventData,
       })
+      
+      console.log('🟢 [HostButton] startCheckout completed successfully')
     } catch (err) {
+      console.error('🔴 [HostButton] ERROR:', err)
       setError(err.message)
       setLoading(false)
     }
