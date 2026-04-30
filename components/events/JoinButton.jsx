@@ -3,9 +3,10 @@ import { useState } from 'react'
 import { startCheckout } from '@/lib/stripe'
 import { getEventType } from '@/lib/utils'
 import Button from '@/components/ui/Button'
+import { auth } from '@/lib/firebase'
 
 // ─── JoinButton ────────────────────────────────────────────────────────────
-export function JoinButton({ event, userId, alreadyJoined, isFull }) {
+export function JoinButton({ event, alreadyJoined, isFull }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -80,15 +81,18 @@ export function JoinButton({ event, userId, alreadyJoined, isFull }) {
 
   async function handleJoin() {
     console.log('🟢 [JoinButton] CLICK JOIN - Starting...')
-    console.log('🟢 [JoinButton] userId:', userId)
     
-    if (!userId) {
-      console.log('🟢 [JoinButton] No userId, redirecting to login')
+    // ✅ Récupère l'utilisateur Firebase directement
+    const user = auth.currentUser
+
+    if (!user) {
+      console.log('🔴 [JoinButton] No Firebase user, redirecting to login')
       window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname)
       return
     }
 
-    console.log('🟢 [JoinButton] User OK, calling startCheckout...')
+    console.log('🟢 [JoinButton] Firebase user OK', user.uid)
+
     setLoading(true)
     setError(null)
     
@@ -96,17 +100,10 @@ export function JoinButton({ event, userId, alreadyJoined, isFull }) {
       const type = getEventType(event.type)
       console.log('🟢 [JoinButton] Event type:', type)
       
-      console.log('🟢 [JoinButton] Calling startCheckout with:', {
-        type: 'join',
-        eventId: event.id,
-        userId,
-        eventData: { type: type.label },
-      })
-      
       await startCheckout({
         type: 'join',
         eventId: event.id,
-        userId,
+        userId: user.uid,          // ✅ uid du token
         eventData: { type: type.label },
       })
       
@@ -150,7 +147,6 @@ export function JoinButton({ event, userId, alreadyJoined, isFull }) {
         </p>
       )}
       
-      {/* Message de statut dynamique */}
       <p style={{
         fontSize: '0.75rem',
         color: statusMsg.color,
@@ -161,7 +157,6 @@ export function JoinButton({ event, userId, alreadyJoined, isFull }) {
         {statusMsg.text}
       </p>
       
-      {/* Politique de remboursement */}
       <p style={{
         fontSize: '0.7rem',
         color: 'var(--text-muted)',
