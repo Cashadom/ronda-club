@@ -122,11 +122,17 @@ export default function UpcomingMeetups() {
             const place = meetup.location_name || ''
             
             const participants = meetup.participants_count ?? 0
-            const limit = meetup.capacity_max ?? 9
             
-            const rawDate = meetup.time
+            // ✅ FIX CAPACITY: Prendre capacity en priorité, puis capacity_max, puis 9
+            const limit = Number(meetup.capacity ?? meetup.capacity_max ?? 9)
+            
+            // ✅ FIX DATE: startAt en priorité, puis time, puis dateTime
+            const rawDate = meetup.startAt || meetup.time || meetup.dateTime
             const meetupDate = rawDate?.toDate ? rawDate.toDate() : new Date(rawDate)
             const isValidDate = meetupDate instanceof Date && !isNaN(meetupDate.getTime())
+            
+            // ✅ FIX TIMEZONE: Récupérer le timezone de l'event
+            const timezone = meetup.timezone || 'UTC'
             
             const price = meetup.price ?? 2
             
@@ -208,7 +214,17 @@ export default function UpcomingMeetups() {
                 </p>
 
                 <p style={{ color: 'var(--text-muted)', marginBottom: 8, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>🕒</span> {isValidDate ? meetupDate.toLocaleString() : 'Date TBD'}
+                  <span>🕒</span> 
+                  {isValidDate
+                    ? meetupDate.toLocaleString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        timeZone: timezone,
+                        timeZoneName: 'short',
+                      })
+                    : 'Date TBD'}
                 </p>
 
                 <p style={{ color: 'var(--text-muted)', marginBottom: 20, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>

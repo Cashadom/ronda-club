@@ -28,7 +28,9 @@ export default function EventDetail({ event, currentUser }) {
   // Normalisation des champs
   const hostId = event.hostId || event.host_id
   const joinedCount = event.participants_count ?? 0
-  const limit = event.capacity_max ?? 9
+  
+  // ✅ FIX CAPACITY: Prendre capacity en priorité, puis capacity_max, puis 9
+  const limit = Number(event.capacity ?? event.capacity_max ?? 9)
   
   const eventDate = event.startAt ? new Date(event.startAt) : null
   const isValidDate = eventDate && !isNaN(eventDate.getTime())
@@ -59,9 +61,20 @@ export default function EventDetail({ event, currentUser }) {
     return 'Refund: $0 (if cancelled <72h before)'
   }
 
-  // Formatage date
-  const formattedDate = isValidDate 
-    ? eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' + eventDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  // ✅ TIMEZONE CORRECTION: Afficher la date dans le fuseau de l'event
+  const eventTimezone = event.timezone || 'UTC'
+  
+  const formattedDate = isValidDate
+    ? eventDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        timeZone: eventTimezone,
+      }) + ' · ' + eventDate.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: eventTimezone,
+        timeZoneName: 'short',
+      })
     : 'Date TBD'
 
   // Badge de statut

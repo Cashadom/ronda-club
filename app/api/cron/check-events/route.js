@@ -76,10 +76,16 @@ export async function GET(req) {
             
             try {
               if (participant.stripe_payment_intent) {
-                await stripe.refunds.create({
-                  payment_intent: participant.stripe_payment_intent,
-                  amount: amountToRefund * 100,
-                })
+                // 🔥 CORRECTION 1: Idempotence Stripe
+                await stripe.refunds.create(
+                  {
+                    payment_intent: participant.stripe_payment_intent,
+                    amount: amountToRefund * 100,
+                  },
+                  {
+                    idempotencyKey: `auto_cancel_refund_${eventId}_${participant.user_id}`,
+                  }
+                )
                 console.log(`💰 [Cron Check Events] Refunded participant ${participant.user_id}: $${amountToRefund}`)
               }
 
@@ -95,7 +101,8 @@ export async function GET(req) {
               // Décrémenter events_attended de l'utilisateur
               const userRef = adminDb.collection('ronda_users').doc(participant.user_id)
               const userSnap = await userRef.get()
-              if (userSnap.exists()) {
+              // 🔥 CORRECTION 2: .exists (pas .exists())
+              if (userSnap.exists) {
                 await userRef.update({
                   events_attended: adminFieldValue.increment(-1),
                   updatedAt: adminFieldValue.serverTimestamp(),
@@ -153,8 +160,9 @@ export async function GET(req) {
 
   } catch (error) {
     console.error('💥 [Cron Check Events] Fatal error:', error.message)
+    // 🔥 CORRECTION 3: Cache l'erreur en prod (optionnel sans clé)
     return new Response(
-      JSON.stringify({ error: 'Internal server error', details: error.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500 }
     )
   }

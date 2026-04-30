@@ -73,6 +73,12 @@ export default function CreateEventForm({ userId, userCity }) {
   const [searchTimeout, setSearchTimeout] = useState(null)
   const [isSearching, setIsSearching] = useState(false)
 
+  // ✅ Récupérer la timezone du navigateur une seule fois
+  const userTimezone = useRef(Intl.DateTimeFormat().resolvedOptions().timeZone)
+
+  // 🔥 DEBUG: Afficher la timezone du user
+  console.log('📍 User timezone:', userTimezone.current)
+
   const set = (field, value) => setForm(f => ({ ...f, [field]: value }))
 
   const selectedType = EVENT_TYPES.find(t => t.value === form.type)
@@ -89,7 +95,18 @@ export default function CreateEventForm({ userId, userCity }) {
 
   const getEventDateTime = () => {
     if (!form.date || !form.time) return null
-    return new Date(`${form.date}T${form.time}`).toISOString()
+    // ✅ FIX TIMEZONE: Ajouter les secondes pour éviter l'ambiguïté
+    const date = new Date(`${form.date}T${form.time}:00`)
+    
+    // Vérifier que la date est valide
+    if (isNaN(date.getTime())) return null
+    
+    // 🔥 DEBUG: Afficher la date avant conversion
+    console.log('📅 Selected date (local):', date.toString())
+    console.log('📅 UTC output:', date.toISOString())
+    
+    // Retourner en ISO string (UTC)
+    return date.toISOString()
   }
 
   // Validation : city ET meetingPoint sont OBLIGATOIRES
@@ -196,18 +213,19 @@ export default function CreateEventForm({ userId, userCity }) {
     }
   }
 
-  // 🔥 CORRECTION : eventData avec startAt et title
+  // ✅ CORRECTION: eventData avec startAt, timezone ET capacity
   const eventData = {
     type: form.type,
     title: `${selectedType.label} in ${form.city.trim()}`,
     city: form.city.trim(),
     meetingPoint: form.meetingPoint.trim(),
     location_name: form.meetingPoint.trim(),
-    startAt: getEventDateTime(),  // ← CHANGÉ : time → startAt
-    capacity: form.capacity,
+    startAt: getEventDateTime(),  // ← UTC
+    timezone: userTimezone.current, // ← timezone du user
+    capacity: form.capacity,  // ← valeur choisie
     description: form.description.trim(),
     capacity_min: CAPACITY_MIN,
-    capacity_max: CAPACITY_MAX,
+    capacity_max: form.capacity,  // ← PAS de constante, la valeur choisie
     ...(coordinates && { coordinates }),
   }
 
@@ -232,7 +250,7 @@ export default function CreateEventForm({ userId, userCity }) {
           {[
             ['📍 Meeting point', form.meetingPoint.trim()],
             ['🏙 City', form.city.trim()],
-            ['⏰ Time', `${form.date} at ${form.time}`],
+            ['⏰ Time', `${form.date} at ${form.time} (${userTimezone.current})`],
             ['👥 Capacity', `${form.capacity} people max`],
             form.description.trim() && ['💬 About', form.description.trim()],
             coordinates && ['🗺️ Map', '📍 Location detected'],
