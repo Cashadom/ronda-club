@@ -57,13 +57,13 @@ export async function POST(req) {
 
         const meetup = meetupSnap.data()
 
-        // 🔐 SÉCURITÉ 1: Vérifier que l'userId correspond bien au host du meetup
+        // 🔐 Vérifier que l'userId correspond bien au host du meetup
         if (meetup.hostId !== userId) {
           console.error('❌ SECURITY: userId does not match meetup host', { userId, meetupHostId: meetup.hostId })
           return new Response('ok', { status: 200 })
         }
 
-        // 🔐 SÉCURITÉ 3: Vérifier le montant payé
+        // 🔐 Vérifier le montant payé
         const expectedAmount = (meetup.price || 2) * 100 // En centimes
         if (session.amount_total !== expectedAmount) {
           console.error('❌ SECURITY: Amount mismatch', { 
@@ -107,11 +107,16 @@ export async function POST(req) {
       if (checkoutType === 'join_event') {
         const { userId, eventId, userName } = metadata
 
+        if (!userId || !eventId) {
+          console.error('❌ Missing userId or eventId in metadata')
+          return new Response('ok', { status: 200 })
+        }
+
         console.log('📝 Processing join_event for eventId:', eventId)
 
         const meetupRef = adminDb.collection('meetups').doc(eventId)
         
-        // 🔐 SÉCURITÉ 2: Utiliser une transaction Firestore
+        // 🔐 Utiliser une transaction Firestore pour toute la logique
         await adminDb.runTransaction(async (transaction) => {
           const meetupSnap = await transaction.get(meetupRef)
 
@@ -127,7 +132,7 @@ export async function POST(req) {
             return
           }
 
-          // 🔐 SÉCURITÉ 3: Vérifier le montant payé
+          // 🔐 Vérifier le montant payé
           const expectedAmount = (meetup.price || 2) * 100
           if (session.amount_total !== expectedAmount) {
             console.error('❌ SECURITY: Amount mismatch for join_event', {
@@ -137,7 +142,8 @@ export async function POST(req) {
             return
           }
 
-          const meetupLimit = meetup.capacity_max || meetup.capacity || 9
+          // ✅ FIX CAPACITY: utiliser capacity en priorité
+          const meetupLimit = Number(meetup.capacity ?? meetup.capacity_max ?? 9)
           const currentParticipants = meetup.participants_count || 0
 
           if (currentParticipants >= meetupLimit) {
@@ -145,24 +151,24 @@ export async function POST(req) {
             return
           }
 
-          // IDEMPOTENCY: Vérifier si déjà traité (dans la transaction)
-          const existingParticipantQuery = await adminDb
-            .collection('meetup_participants')
-            .where('event_id', '==', eventId)
-            .where('user_id', '==', userId)
-            .get()
+          // 🔥 IDEMPOTENCY: Vérifier si déjà participant (dans la transaction)
+          const existingParticipantQuery = await transaction.get(
+            adminDb.collection('meetup_participants')
+              .where('event_id', '==', eventId)
+              .where('user_id', '==', userId)
+          )
 
           if (!existingParticipantQuery.empty) {
             console.log('⚠️ Participant already exists, skipping (idempotency)')
             return
           }
 
-          // Vérifier doublon de session Stripe
-          const duplicateQuery = await adminDb
-            .collection('meetup_participants')
-            .where('event_id', '==', eventId)
-            .where('stripe_session_id', '==', session.id)
-            .get()
+          // 🔥 Vérifier doublon de session Stripe (dans la transaction)
+          const duplicateQuery = await transaction.get(
+            adminDb.collection('meetup_participants')
+              .where('event_id', '==', eventId)
+              .where('stripe_session_id', '==', session.id)
+          )
 
           if (!duplicateQuery.empty) {
             console.log('⚠️ Duplicate webhook, skipping')
@@ -171,7 +177,7 @@ export async function POST(req) {
 
           const newCount = currentParticipants + 1
 
-          // Mettre à jour le meetup dans la transaction
+          // Mettre à jour le meetup
           transaction.update(meetupRef, {
             participants_count: newCount,
             updatedAt: adminFieldValue.serverTimestamp(),
@@ -225,7 +231,6 @@ export async function POST(req) {
     } catch (err) {
       console.error('💥 Webhook error:', err.message)
       console.error('💥 Webhook stack:', err.stack)
-      // On retourne 200 pour éviter que Stripe réessaie si l'erreur est déjà loggée
       return new Response('ok', { status: 200 })
     }
   }
