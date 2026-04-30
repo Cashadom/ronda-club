@@ -59,6 +59,7 @@ export async function POST(request) {
 
     // 🔐 SÉCURITÉ 1: Récupérer userId depuis le token Firebase
     const authHeader = request.headers.get('authorization')
+    console.log('[Checkout] Auth header present:', !!authHeader) // 🔥 DEBUG
     
     if (!authHeader?.startsWith('Bearer ')) {
       console.error('[Checkout] Missing or invalid auth header')
@@ -66,6 +67,8 @@ export async function POST(request) {
     }
 
     const token = authHeader.split('Bearer ')[1]
+    console.log('[Checkout] Token length:', token?.length) // 🔥 DEBUG
+    
     let decoded
     
     try {
@@ -257,7 +260,8 @@ export async function POST(request) {
         return Response.json({ error: 'Event has already passed' }, { status: 400 })
       }
 
-      const meetupLimit = meetup.capacity_max || meetup.capacity || 9
+      // ✅ FIX CAPACITY: utiliser capacity en priorité
+      const meetupLimit = Number(meetup.capacity ?? meetup.capacity_max ?? 9)
       const currentParticipants = meetup.participants_count || 0
 
       if (currentParticipants >= meetupLimit) {
