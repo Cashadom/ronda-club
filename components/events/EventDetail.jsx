@@ -391,7 +391,8 @@ export default function EventDetail({ event, currentUser }) {
           {!isHost && !isPast && !isCancelled && (
             <>
               {!alreadyJoined && !isFull && isPaid && (
-                <JoinButton event={event} userId={currentUser?.uid} alreadyJoined={alreadyJoined} isFull={isFull} />
+                // ✅ CORRECTION : suppression de la prop userId
+                <JoinButton event={event} alreadyJoined={alreadyJoined} isFull={isFull} />
               )}
               
               {alreadyJoined && (

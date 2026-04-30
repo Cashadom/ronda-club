@@ -82,9 +82,7 @@ export function JoinButton({ event, alreadyJoined, isFull }) {
   async function handleJoin() {
     console.log('🟢 [JoinButton] CLICK JOIN - Starting...')
     
-    // ✅ Récupère l'utilisateur Firebase directement
     const user = auth.currentUser
-
     if (!user) {
       console.log('🔴 [JoinButton] No Firebase user, redirecting to login')
       window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname)
@@ -100,10 +98,10 @@ export function JoinButton({ event, alreadyJoined, isFull }) {
       const type = getEventType(event.type)
       console.log('🟢 [JoinButton] Event type:', type)
       
+      // ✅ CORRECTION : plus de userId dans l'appel
       await startCheckout({
         type: 'join',
         eventId: event.id,
-        userId: user.uid,          // ✅ uid du token
         eventData: { type: type.label },
       })
       
@@ -170,37 +168,29 @@ export function JoinButton({ event, alreadyJoined, isFull }) {
 }
 
 // ─── HostButton ────────────────────────────────────────────────────────────
-export function HostButton({ eventData, userId }) {
+export function HostButton({ eventData }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
   async function handleHost() {
     console.log('🟢 [HostButton] CLICK HOST - Starting...')
-    console.log('🟢 [HostButton] userId:', userId)
     
-    if (!userId) {
-      console.log('🟢 [HostButton] No userId, redirecting to login')
+    const user = auth.currentUser
+    if (!user) {
+      console.log('🔴 [HostButton] No Firebase user, redirecting to login')
       window.location.href = '/login?redirect=/create'
       return
     }
 
-    console.log('🟢 [HostButton] User OK, calling startCheckout...')
+    console.log('🟢 [HostButton] Firebase user OK', user.uid)
     setLoading(true)
     setError(null)
     
     try {
-      console.log('🟢 [HostButton] Calling startCheckout with:', {
-        type: 'host',
-        userId,
-        eventData,
-      })
-      
       await startCheckout({
         type: 'host',
-        userId,
         eventData,
       })
-      
       console.log('🟢 [HostButton] startCheckout completed successfully')
     } catch (err) {
       console.error('🔴 [HostButton] ERROR:', err)
