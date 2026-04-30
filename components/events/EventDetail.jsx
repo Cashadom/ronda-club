@@ -3,19 +3,48 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { getEventType } from '@/lib/utils'
-import { getEventParticipants, markAttendance, CAPACITY_MIN } from '@/lib/events'
 import { getUserProfile } from '@/lib/users'
 import { updateTrustScore, TRUST_DELTA } from '@/lib/trust'
 import { JoinButton } from './JoinButton'
 import AvatarStack from './AvatarStack'
 import TrustBadge from './TrustBadge'
 import EditEventButton from './EditEventButton'
+// 🔥 Nouveaux imports firebase
+import { collection, getDocs, query, where, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 // Import dynamique de la carte
 const MapComponent = dynamic(() => import('@/components/events/MapComponent'), {
   ssr: false,
   loading: () => <div style={{ height: '180px', background: '#f8fafc', borderRadius: '20px' }} />
 })
+
+// 🔥 Définitions locales des fonctions manquantes
+const CAPACITY_MIN = 6
+
+async function getEventParticipants(eventId) {
+  const q = query(
+    collection(db, 'meetup_participants'),
+    where('event_id', '==', eventId),
+    where('status', '==', 'joined')
+  )
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data(), ref: d.ref }))
+}
+
+async function markAttendance(eventId, userId, status) {
+  const q = query(
+    collection(db, 'meetup_participants'),
+    where('event_id', '==', eventId),
+    where('user_id', '==', userId)
+  )
+  const snap = await getDocs(q)
+  if (snap.empty) throw new Error('Participant not found')
+  await updateDoc(snap.docs[0].ref, {
+    attendance_status: status,
+    marked_at: serverTimestamp(),
+  })
+}
 
 export default function EventDetail({ event, currentUser }) {
   const [participants, setParticipants] = useState([])
