@@ -127,9 +127,11 @@ export async function POST(req) {
 
           const meetup = meetupSnap.data()
           
+          // ✅ FIX: Ne plus bloquer si status !== 'paid'
+          // Le paiement Stripe est la seule vérité
           if (meetup.status !== 'paid') {
-            console.error('❌ Meetup not paid:', meetup.status)
-            return
+            console.log('⚠️ Meetup status is:', meetup.status, '- allowing join anyway (Stripe payment confirmed)')
+            // Continue - ne pas bloquer
           }
 
           // 🔐 Vérifier le montant payé
