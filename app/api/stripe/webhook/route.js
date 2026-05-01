@@ -24,6 +24,82 @@ export async function POST(req) {
 
   console.log('✅ Stripe event:', event.type)
 
+  // 🔥 FLUX 3: CHARGE_REFUNDED - Gérer les remboursements (AVANT checkout.session.completed)
+  if (event.type === 'charge.refunded') {
+    const charge = event.data.object
+    const sessionId = charge.metadata?.session_id
+    
+    console.log('💰 Refund detected for session:', sessionId)
+    
+    if (!sessionId) {
+      console.error('❌ No session_id in charge metadata')
+      return new Response('ok', { status: 200 })
+    }
+    
+    // Trouver le participant concerné
+    const participantQuery = await adminDb.collection('meetup_participants')
+      .where('stripe_session_id', '==', sessionId)
+      .limit(1)
+      .get()
+      
+    if (participantQuery.empty) {
+      console.error('❌ No participant found for session:', sessionId)
+      return new Response('ok', { status: 200 })
+    }
+    
+    const participantDoc = participantQuery.docs[0]
+    const participant = participantDoc.data()
+    const eventId = participant.event_id
+    const userId = participant.user_id
+    
+    console.log(`💰 Processing refund for user ${userId} from event ${eventId}`)
+    
+    await adminDb.runTransaction(async (transaction) => {
+      // READ: Récupérer le meetup
+      const meetupRef = adminDb.collection('meetups').doc(eventId)
+      const meetupSnap = await transaction.get(meetupRef)
+      
+      if (!meetupSnap.exists) {
+        console.error('❌ Meetup not found:', eventId)
+        return
+      }
+      
+      const meetup = meetupSnap.data()
+      const currentCount = meetup.participants_count || 0
+      const newCount = Math.max(0, currentCount - 1)
+      
+      // READ: Récupérer l'utilisateur
+      const userRef = adminDb.collection('ronda_users').doc(userId)
+      const userSnap = await transaction.get(userRef)
+      
+      // WRITES: Mettre à jour tout
+      transaction.update(meetupRef, {
+        participants_count: newCount,
+        updatedAt: adminFieldValue.serverTimestamp(),
+      })
+      
+      if (userSnap.exists) {
+        const currentAttended = userSnap.data().events_attended || 0
+        transaction.update(userRef, {
+          events_attended: Math.max(0, currentAttended - 1),
+          updatedAt: adminFieldValue.serverTimestamp(),
+        })
+      }
+      
+      transaction.update(participantDoc.ref, {
+        refund_status: 'refunded',
+        refund_amount: charge.amount_refunded / 100,
+        refunded_at: adminFieldValue.serverTimestamp(),
+        status: 'left',
+      })
+      
+      console.log(`✅ Refund processed: event ${eventId} → ${newCount} participants left`)
+    })
+    
+    console.log('✅ Refund transaction completed')
+    return new Response('ok', { status: 200 })
+  }
+
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object
 
