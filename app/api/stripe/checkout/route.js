@@ -59,7 +59,7 @@ export async function POST(request) {
 
     // 🔐 SÉCURITÉ 1: Récupérer userId depuis le token Firebase
     const authHeader = request.headers.get('authorization')
-    console.log('[Checkout] Auth header present:', !!authHeader) // 🔥 DEBUG
+    console.log('[Checkout] Auth header present:', !!authHeader)
     
     if (!authHeader?.startsWith('Bearer ')) {
       console.error('[Checkout] Missing or invalid auth header')
@@ -67,7 +67,7 @@ export async function POST(request) {
     }
 
     const token = authHeader.split('Bearer ')[1]
-    console.log('[Checkout] Token length:', token?.length) // 🔥 DEBUG
+    console.log('[Checkout] Token length:', token?.length)
     
     let decoded
     
@@ -152,8 +152,10 @@ export async function POST(request) {
         return Response.json({ error: 'Start date must be at least 2 hours in the future' }, { status: 400 })
       }
 
-      if (!eventData.type || !['outing', 'dinner', 'drinks', 'cultural'].includes(eventData.type)) {
-        return Response.json({ error: 'Invalid event type' }, { status: 400 })
+      // ✅ FIX: Validation flexible du type d'event (plus de whitelist)
+      const eventType = eventData.type?.trim().toLowerCase()
+      if (!eventType || eventType.length < 2 || eventType.length > 30) {
+        return Response.json({ error: 'Invalid event type (must be 2-30 characters)' }, { status: 400 })
       }
 
       const meetupRef = adminDb.collection('meetups').doc()
@@ -162,8 +164,8 @@ export async function POST(request) {
       await meetupRef.set({
         id: meetupRef.id,
         hostId: userId,
-        type: eventData.type,
-        title: eventData.title?.trim() || `${eventData.type} in ${eventData.city}`,
+        type: eventType,  // ← type validé flexible
+        title: eventData.title?.trim() || `${eventType} in ${eventData.city}`,
         description: eventData.description?.trim() || '',
         city: eventData.city.trim(),
         meetingPoint: eventData.meetingPoint?.trim() || '',
@@ -194,6 +196,7 @@ export async function POST(request) {
         timezone: eventData.timezone,
         capacity: capacity,
         capacity_max: capacity_max,
+        type: eventType,
       })
 
       const session = await stripe.checkout.sessions.create({
@@ -205,7 +208,7 @@ export async function POST(request) {
               currency: 'usd',
               unit_amount: PRICE_CENTS,
               product_data: {
-                name: `Host a Ronda event — ${eventData.type}`,
+                name: `Host a Ronda event — ${eventType}`,
                 description: `Create your event in ${eventData.city}. It goes live immediately.`,
               },
             },
