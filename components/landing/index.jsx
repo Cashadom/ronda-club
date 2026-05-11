@@ -100,24 +100,112 @@ export function HeroSection() {
           </Link>
         </div>
 
-        {/* Social proof */}
+        {/* Social proof avec vraies photos - sans fallback */}
         <div className="animate-fadeUp delay-4" style={{
           display:'flex', alignItems:'center', gap:'14px',
           justifyContent:'center', marginTop:'52px',
         }}>
           <div style={{ display:'flex' }}>
-            {['#FF6B51','#3B82F6','#10B981','#F59E0B','#8B5CF6'].map((bg, i) => (
-              <div key={i} style={{
-                width:36, height:36, borderRadius:'50%',
-                border:'2.5px solid #fff',
-                marginLeft: i === 0 ? 0 : -9,
-                background:bg,
-                display:'flex', alignItems:'center', justifyContent:'center',
-                fontSize:'0.75rem', fontWeight:700, color:'#fff',
-              }}>
-                {['A','K','R','M','P'][i]}
-              </div>
-            ))}
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              border: '2.5px solid #fff',
+              marginLeft: 0,
+              overflow: 'hidden',
+              background: '#f0f0f0',
+            }}>
+              <img
+                src="/faces/facea.png"
+                alt=""
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  borderRadius: '50%',
+                }}
+              />
+            </div>
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              border: '2.5px solid #fff',
+              marginLeft: -9,
+              overflow: 'hidden',
+              background: '#f0f0f0',
+            }}>
+              <img
+                src="/faces/faceb.png"
+                alt=""
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  borderRadius: '50%',
+                }}
+              />
+            </div>
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              border: '2.5px solid #fff',
+              marginLeft: -9,
+              overflow: 'hidden',
+              background: '#f0f0f0',
+            }}>
+              <img
+                src="/faces/facec.png"
+                alt=""
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  borderRadius: '50%',
+                }}
+              />
+            </div>
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              border: '2.5px solid #fff',
+              marginLeft: -9,
+              overflow: 'hidden',
+              background: '#f0f0f0',
+            }}>
+              <img
+                src="/faces/faced.png"
+                alt=""
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  borderRadius: '50%',
+                }}
+              />
+            </div>
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              border: '2.5px solid #fff',
+              marginLeft: -9,
+              overflow: 'hidden',
+              background: '#f0f0f0',
+            }}>
+              <img
+                src="/faces/facee.png"
+                alt=""
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  borderRadius: '50%',
+                }}
+              />
+            </div>
           </div>
           <p style={{ fontSize:'0.88rem', color:'var(--text-muted)' }}>
             <strong style={{ color:'var(--text)' }}>3,000+ people</strong> already in the community
