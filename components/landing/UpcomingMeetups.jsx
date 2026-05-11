@@ -10,13 +10,11 @@ const MiniMap = dynamic(() => import('@/components/events/MapComponent'), {
   loading: () => <div style={{ height: '100px', background: '#f0f0f0', borderRadius: '12px' }} />
 })
 
-const MEETUP_TYPES = [
-  { value: 'drinks',   label: 'Drinks',         emoji: '🍻' },
-  { value: 'coffee',   label: 'Coffee',          emoji: '☕' },
-  { value: 'walk',     label: 'Walk',            emoji: '🚶' },
-  { value: 'dinner',   label: 'Dinner',          emoji: '🍽' },
-  { value: 'language', label: 'Language Meetup', emoji: '🗣' },
-  { value: 'hangout',  label: 'Social Hangout',  emoji: '🎯' },
+// ✅ MODIFICATION : Réduction des types (plus de coffee, walk, dinner)
+const SOCIAL_TYPES = [
+  { value: 'drinks',   label: 'Social Drinks',   emoji: '🍻' },
+  { value: 'language', label: 'Language Exchange', emoji: '🗣' },
+  { value: 'hangout',  label: 'Night Out',       emoji: '🎯' },
 ]
 
 export default function UpcomingMeetups() {
@@ -29,7 +27,6 @@ export default function UpcomingMeetups() {
         const data = await fetchUpcomingEventsGlobal(4)
         console.log('📅 [UpcomingMeetups] Events loaded:', data.length)
         
-        // 🔍 LOG CRUCIAL - Vérifier l'ID du premier événement
         if (data.length > 0) {
           console.log('📅 [UpcomingMeetups] First event id:', data[0]?.id)
           console.log('📅 [UpcomingMeetups] First event type of id:', typeof data[0]?.id)
@@ -46,16 +43,51 @@ export default function UpcomingMeetups() {
     loadMeetups()
   }, [])
 
-  const getMeetupTypeLabel = (typeValue) => {
-    const found = MEETUP_TYPES.find(t => t.value === typeValue)
-    return found ? `${found.emoji} ${found.label}` : typeValue || 'Meetup'
+  // ✅ MODIFICATION : Label adapté aux nouveaux types
+  const getSocialTypeLabel = (typeValue) => {
+    const found = SOCIAL_TYPES.find(t => t.value === typeValue)
+    if (found) return `${found.emoji} ${found.label}`
+    
+    // Fallback pour les types legacy (coffee, walk, dinner) → redirigé vers Social Drinks
+    if (['coffee', 'walk', 'dinner'].includes(typeValue)) {
+      return `🍻 Social Drinks`
+    }
+    
+    return typeValue || 'Social Night'
+  }
+
+  // ✅ NOUVELLE FONCTION : Générer un titre basé sur la description
+  const getSocialTitle = (meetup) => {
+    // Priorité à la description
+    if (meetup.description && meetup.description.trim().length > 0) {
+      const desc = meetup.description.trim()
+      // Prendre les 6 premiers mots
+      const words = desc.split(' ')
+      const firstSix = words.slice(0, 6).join(' ')
+      if (words.length > 6) {
+        return `${firstSix}...`
+      }
+      return firstSix
+    }
+    
+    // Fallback sur le meetingPoint si pas de description
+    if (meetup.meetingPoint) return meetup.meetingPoint
+    
+    // Fallback sur le titre
+    if (meetup.title) return meetup.title
+    
+    // Dernier fallback
+    const city = meetup.city || meetup.location || ''
+    const meetupType = meetup.type || 'hangout'
+    const typeLabel = getSocialTypeLabel(meetupType)
+    return `${typeLabel} · ${city}`
   }
 
   if (loading) {
     return (
       <section style={{ padding: '80px 5%', background: '#fff' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', textAlign: 'center' }}>
-          <p style={{ color: 'var(--text-muted)' }}>Loading events...</p>
+          <p style={{ color: 'var(--text-muted)' }}>Loading social nights...</p>
         </div>
       </section>
     )
@@ -65,7 +97,7 @@ export default function UpcomingMeetups() {
     return (
       <section style={{ padding: '80px 5%', background: '#fff' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', textAlign: 'center' }}>
-          <p style={{ color: 'var(--text-muted)' }}>No upcoming events yet. Be the first to create one!</p>
+          <p style={{ color: 'var(--text-muted)' }}>No social nights yet. Be the first to host one!</p>
           <Link href="/create" style={{
             display: 'inline-block',
             marginTop: 16,
@@ -76,7 +108,7 @@ export default function UpcomingMeetups() {
             textDecoration: 'none',
             fontWeight: 600
           }}>
-            Create an event →
+            Host a social night →
           </Link>
         </div>
       </section>
@@ -94,7 +126,7 @@ export default function UpcomingMeetups() {
           fontWeight: 700,
           marginBottom: 12
         }}>
-          What's happening in the world
+          Tonight & this week
         </p>
 
         <h2 style={{
@@ -104,7 +136,7 @@ export default function UpcomingMeetups() {
           color: 'var(--text)',
           marginBottom: 30
         }}>
-          The next meetups, live now
+          The next social nights
         </h2>
 
         <div style={{
@@ -113,34 +145,29 @@ export default function UpcomingMeetups() {
           gap: 20
         }}>
           {meetups.map(meetup => {
-            // 🔍 LOG dans la map
-            console.log('🎴 [UpcomingMeetups] Rendering meetup id:', meetup?.id)
-            
-            // Normalisation des champs
             const meetupType = meetup.type || meetup.category || 'hangout'
             const city = meetup.city || meetup.location || ''
             const place = meetup.location_name || ''
-            
             const participants = meetup.participants_count ?? 0
-            
-            // ✅ FIX CAPACITY: Prendre capacity en priorité, puis capacity_max, puis 9
             const limit = Number(meetup.capacity ?? meetup.capacity_max ?? 9)
             
-            // ✅ FIX DATE: startAt en priorité, puis time, puis dateTime
             const rawDate = meetup.startAt || meetup.time || meetup.dateTime
             const meetupDate = rawDate?.toDate ? rawDate.toDate() : new Date(rawDate)
             const isValidDate = meetupDate instanceof Date && !isNaN(meetupDate.getTime())
-            
-            // ✅ FIX TIMEZONE: Récupérer le timezone de l'event
             const timezone = meetup.timezone || 'UTC'
-            
             const price = meetup.price ?? 2
             
-            // 🗺️ Vérifier les coordonnées pour la carte
             const hasCoordinates = meetup.coordinates?.lat && meetup.coordinates?.lng
             const mapCenter = hasCoordinates 
               ? [Number(meetup.coordinates.lat), Number(meetup.coordinates.lng)]
               : null
+            
+            // ✅ MODIFICATION : Texte du bouton dynamique selon le type
+            const getButtonText = () => {
+              if (meetupType === 'drinks') return `Join the drinks →`
+              if (meetupType === 'language') return `Join the exchange →`
+              return `Join the social →`
+            }
             
             return (
               <Link
@@ -179,7 +206,7 @@ export default function UpcomingMeetups() {
                   textTransform: 'uppercase',
                   marginBottom: 12
                 }}>
-                  {getMeetupTypeLabel(meetupType)}
+                  {getSocialTypeLabel(meetupType)}
                 </div>
 
                 <h3 style={{
@@ -189,10 +216,9 @@ export default function UpcomingMeetups() {
                   color: 'var(--text)',
                   lineHeight: 1.3
                 }}>
-                  {meetup.meetingPoint || meetup.title || `${meetupType} in ${city}`}
+                  {getSocialTitle(meetup)}
                 </h3>
 
-                {/* 🗺️ MINI CARTE */}
                 {mapCenter && (
                   <div style={{
                     marginBottom: 16,
@@ -228,10 +254,9 @@ export default function UpcomingMeetups() {
                 </p>
 
                 <p style={{ color: 'var(--text-muted)', marginBottom: 20, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>👥</span> {participants} / {limit} participants
+                  <span>👥</span> {participants} / {limit} people
                 </p>
 
-                {/* 🔥 BOUTON CORAIL TEXTE BLANC */}
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -257,7 +282,7 @@ export default function UpcomingMeetups() {
                     cursor: 'pointer',
                     display: 'inline-block'
                   }}>
-                    Join ${price} →
+                    {getButtonText()}
                   </span>
                 </div>
               </Link>
