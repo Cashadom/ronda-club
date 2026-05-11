@@ -3,11 +3,11 @@ import Navbar from '@/components/landing/Navbar'
 import Script from 'next/script'
 
 export const metadata = {
-  title:       'Ronda — Real Meetups. Real People.',
-  description: 'Join small real-life meetups in your city. Drinks, coffee, walks, dinners. $2 to join. Small groups. Real presence.',
+  title:       'Ronda — Real Social Nights',
+  description: 'Meet new people through curated social nights. Drinks, language exchanges and nights out in small groups. $2 to join.',
   openGraph: {
-    title:       'Ronda — Real Meetups. Real People.',
-    description: 'Small groups. Real presence. One tap.',
+    title:       'Ronda — Real Social Nights',
+    description: 'Curated social nights. Small groups. Real connections.',
     type:        'website',
   },
 }
