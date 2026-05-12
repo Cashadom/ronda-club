@@ -53,6 +53,19 @@ export async function PUT(req, { params }) {
       )
     }
 
+    // 🔥 VALIDATION CAPACITY_MAX (entre 6 et 20)
+    if (updates.capacity_max !== undefined) {
+      const capacity = Number(updates.capacity_max)
+      if (isNaN(capacity) || capacity < 6 || capacity > 20) {
+        return new Response(
+          JSON.stringify({ error: 'Capacity must be between 6 and 20' }),
+          { status: 400 }
+        )
+      }
+      // Garder la valeur validée
+      updates.capacity_max = capacity
+    }
+
     // Champs autorisés à la modification
     const allowedFields = [
       'title', 'description', 'meetingPoint', 'venue', 
