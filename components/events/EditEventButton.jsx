@@ -13,7 +13,7 @@ export default function EditEventButton({ event, userId }) {
     venue: event.venue || '',
     city: event.city || '',
     startAt: event.startAt ? new Date(event.startAt).toISOString().slice(0, 16) : '',
-    capacity_max: event.capacity_max || 9,
+    capacity_max: event.capacity_max || 15,
   })
 
   const isHost = userId === (event.hostId || event.host_id)
@@ -21,12 +21,23 @@ export default function EditEventButton({ event, userId }) {
   if (!isHost) return null
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+    const { name, value } = e.target
+    setFormData({
+      ...formData,
+      [name]: name === 'capacity_max' ? Number(value) : value
+    })
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
+
+    // Validation côté front
+    if (formData.capacity_max < 6 || formData.capacity_max > 20) {
+      alert('Capacity must be between 6 and 20')
+      setLoading(false)
+      return
+    }
 
     try {
       const res = await fetch(`/api/events/${event.id}/edit`, {
@@ -150,11 +161,14 @@ export default function EditEventButton({ event, userId }) {
                 name="capacity_max"
                 type="number"
                 min={6}
-                max={9}
+                max={20}
                 value={formData.capacity_max}
                 onChange={handleChange}
                 style={{ width: '100%', padding: 10, borderRadius: 12, border: '1px solid #ccc' }}
               />
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                Between 6 and 20 people
+              </p>
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>

@@ -4,17 +4,15 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { fetchUpcomingEventsGlobal } from '@/lib/events'
 
-// Import dynamique de la mini carte
 const MiniMap = dynamic(() => import('@/components/events/MapComponent'), {
   ssr: false,
-  loading: () => <div style={{ height: '100px', background: '#f0f0f0', borderRadius: '12px' }} />
+  loading: () => <div style={{ height: '100px', background: '#faf9f7', borderRadius: '20px' }} />
 })
 
-// ✅ MODIFICATION : Réduction des types (plus de coffee, walk, dinner)
 const SOCIAL_TYPES = [
-  { value: 'drinks',   label: 'Social Drinks',   emoji: '🍻' },
-  { value: 'language', label: 'Language Exchange', emoji: '🗣' },
-  { value: 'hangout',  label: 'Night Out',       emoji: '🎯' },
+  { value: 'drinks',   label: 'Social Drinks',   emoji: '🍸' },
+  { value: 'language', label: 'Language Exchange', emoji: '🌍' },
+  { value: 'hangout',  label: 'Night Out',       emoji: '🌙' },
 ]
 
 export default function UpcomingMeetups() {
@@ -25,17 +23,9 @@ export default function UpcomingMeetups() {
     async function loadMeetups() {
       try {
         const data = await fetchUpcomingEventsGlobal(4)
-        console.log('📅 [UpcomingMeetups] Events loaded:', data.length)
-        
-        if (data.length > 0) {
-          console.log('📅 [UpcomingMeetups] First event id:', data[0]?.id)
-          console.log('📅 [UpcomingMeetups] First event type of id:', typeof data[0]?.id)
-          console.log('📅 [UpcomingMeetups] First event full:', data[0])
-        }
-        
         setMeetups(data)
       } catch (error) {
-        console.error('Error loading events:', error)
+        console.error('Failed to load events:', error)
       } finally {
         setLoading(false)
       }
@@ -43,51 +33,30 @@ export default function UpcomingMeetups() {
     loadMeetups()
   }, [])
 
-  // ✅ MODIFICATION : Label adapté aux nouveaux types
-  const getSocialTypeLabel = (typeValue) => {
-    const found = SOCIAL_TYPES.find(t => t.value === typeValue)
-    if (found) return `${found.emoji} ${found.label}`
-    
-    // Fallback pour les types legacy (coffee, walk, dinner) → redirigé vers Social Drinks
-    if (['coffee', 'walk', 'dinner'].includes(typeValue)) {
-      return `🍻 Social Drinks`
-    }
-    
-    return typeValue || 'Social Night'
+  const getTypeLabel = (type) => {
+    const found = SOCIAL_TYPES.find(t => t.value === type)
+    return found || { emoji: '🍸', label: 'Social Night' }
   }
 
-  // ✅ NOUVELLE FONCTION : Générer un titre basé sur la description
-  const getSocialTitle = (meetup) => {
-    // Priorité à la description
-    if (meetup.description && meetup.description.trim().length > 0) {
-      const desc = meetup.description.trim()
-      // Prendre les 6 premiers mots
-      const words = desc.split(' ')
-      const firstSix = words.slice(0, 6).join(' ')
-      if (words.length > 6) {
-        return `${firstSix}...`
-      }
-      return firstSix
-    }
-    
-    // Fallback sur le meetingPoint si pas de description
-    if (meetup.meetingPoint) return meetup.meetingPoint
-    
-    // Fallback sur le titre
-    if (meetup.title) return meetup.title
-    
-    // Dernier fallback
-    const city = meetup.city || meetup.location || ''
-    const meetupType = meetup.type || 'hangout'
-    const typeLabel = getSocialTypeLabel(meetupType)
-    return `${typeLabel} · ${city}`
+  const formatDate = (dateStr, timezone) => {
+    if (!dateStr) return 'Date TBD'
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return 'Date TBD'
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: timezone || 'UTC',
+      timeZoneName: 'short',
+    })
   }
 
   if (loading) {
     return (
-      <section style={{ padding: '80px 5%', background: '#fff' }}>
+      <section style={{ padding: '80px 5%', background: '#faf9f7' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', textAlign: 'center' }}>
-          <p style={{ color: 'var(--text-muted)' }}>Loading social nights...</p>
+          <div style={{ display: 'inline-block', width: 32, height: 32, borderRadius: '50%', border: '2px solid var(--coral)', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
         </div>
       </section>
     )
@@ -95,20 +64,12 @@ export default function UpcomingMeetups() {
 
   if (meetups.length === 0) {
     return (
-      <section style={{ padding: '80px 5%', background: '#fff' }}>
+      <section style={{ padding: '80px 5%', background: '#faf9f7' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', textAlign: 'center' }}>
-          <p style={{ color: 'var(--text-muted)' }}>No social nights yet. Be the first to host one!</p>
-          <Link href="/create" style={{
-            display: 'inline-block',
-            marginTop: 16,
-            padding: '10px 24px',
-            background: 'var(--coral)',
-            color: '#fff',
-            borderRadius: 40,
-            textDecoration: 'none',
-            fontWeight: 600
-          }}>
-            Host a social night →
+          <div style={{ fontSize: 48, marginBottom: 16 }}>✨</div>
+          <p style={{ color: 'var(--text-mid)' }}>No social nights scheduled yet.</p>
+          <Link href="/create" style={{ display: 'inline-block', marginTop: 20, color: 'var(--coral)', fontWeight: 500, textDecoration: 'none', borderBottom: '1px solid var(--coral-border)' }}>
+            Be the first to host one →
           </Link>
         </div>
       </section>
@@ -116,180 +77,211 @@ export default function UpcomingMeetups() {
   }
 
   return (
-    <section style={{ padding: '80px 5%', background: '#fff' }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-        <p style={{
-          fontSize: '0.75rem',
-          letterSpacing: '2px',
-          textTransform: 'uppercase',
-          color: 'var(--coral)',
-          fontWeight: 700,
-          marginBottom: 12
-        }}>
-          Tonight & this week
-        </p>
-
-        <h2 style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(2rem, 4vw, 3rem)',
-          fontWeight: 900,
-          color: 'var(--text)',
-          marginBottom: 30
-        }}>
-          The next social nights
-        </h2>
+    <section style={{ padding: 'clamp(60px, 10vw, 100px) 5%', background: '#faf9f7' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+          <p style={{
+            fontSize: '0.7rem',
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+            color: 'var(--coral)',
+            fontWeight: 500,
+            marginBottom: 12
+          }}>
+            Join the next ones
+          </p>
+          <h2 style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(2rem, 4vw, 3.2rem)',
+            fontWeight: 400,
+            color: 'var(--text)',
+            marginBottom: 12
+          }}>
+            Social nights,<br />close to you
+          </h2>
+          <div style={{ width: 50, height: 2, background: 'var(--coral)', margin: '0 auto' }} />
+        </div>
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: 20
+          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+          gap: 32
         }}>
           {meetups.map(meetup => {
-            const meetupType = meetup.type || meetup.category || 'hangout'
-            const city = meetup.city || meetup.location || ''
-            const place = meetup.location_name || ''
-            const participants = meetup.participants_count ?? 0
-            const limit = Number(meetup.capacity ?? meetup.capacity_max ?? 9)
-            
-            const rawDate = meetup.startAt || meetup.time || meetup.dateTime
-            const meetupDate = rawDate?.toDate ? rawDate.toDate() : new Date(rawDate)
-            const isValidDate = meetupDate instanceof Date && !isNaN(meetupDate.getTime())
-            const timezone = meetup.timezone || 'UTC'
-            const price = meetup.price ?? 2
-            
-            const hasCoordinates = meetup.coordinates?.lat && meetup.coordinates?.lng
-            const mapCenter = hasCoordinates 
-              ? [Number(meetup.coordinates.lat), Number(meetup.coordinates.lng)]
-              : null
-            
-            // ✅ MODIFICATION : Texte du bouton dynamique selon le type
-            const getButtonText = () => {
-              if (meetupType === 'drinks') return `Join the drinks →`
-              if (meetupType === 'language') return `Join the exchange →`
-              return `Join the social →`
-            }
-            
+            const typeInfo = getTypeLabel(meetup.type)
+            const attendees = meetup.participants_count || 0
+            const capacity = meetup.capacity || 12
+            const spotsLeft = capacity - attendees
+            const isUrgent = spotsLeft <= 3 && spotsLeft > 0
+            const isFull = spotsLeft === 0
+
             return (
               <Link
                 key={meetup.id}
                 href={`/events/${meetup.id}`}
-                style={{
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  background: '#fff',
-                  border: '2px solid var(--coral-border)',
-                  borderRadius: 24,
-                  padding: 20,
-                  boxShadow: '0 4px 12px rgba(255,107,81,0.08)',
-                  transition: 'all 0.25s ease',
-                  display: 'block',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-6px)'
-                  e.currentTarget.style.boxShadow = '0 16px 28px rgba(255,107,81,0.15)'
-                  e.currentTarget.style.borderColor = 'var(--coral)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(255,107,81,0.08)'
-                  e.currentTarget.style.borderColor = 'var(--coral-border)'
-                }}
+                style={{ textDecoration: 'none' }}
               >
                 <div style={{
-                  display: 'inline-block',
-                  padding: '4px 12px',
-                  borderRadius: 999,
-                  background: 'var(--coral-pale)',
-                  color: 'var(--coral)',
-                  fontWeight: 700,
-                  fontSize: '0.7rem',
-                  textTransform: 'uppercase',
-                  marginBottom: 12
+                  background: '#fff',
+                  borderRadius: 28,
+                  overflow: 'hidden',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                  border: '1px solid #f0ede9',
+                  transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-6px)'
+                  e.currentTarget.style.boxShadow = '0 24px 48px -12px rgba(0,0,0,0.15)'
+                  e.currentTarget.style.borderColor = 'var(--coral-border)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.02)'
+                  e.currentTarget.style.borderColor = '#f0ede9'
                 }}>
-                  {getSocialTypeLabel(meetupType)}
-                </div>
+                  
+                  <div style={{ padding: 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <span style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 500,
+                        color: 'var(--coral)',
+                        background: 'var(--coral-pale)',
+                        padding: '4px 12px',
+                        borderRadius: 40,
+                      }}>
+                        {typeInfo.emoji} {typeInfo.label}
+                      </span>
+                      {isUrgent && !isFull && (
+                        <span style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 500,
+                          color: '#E85D04',
+                          background: '#FFF3E8',
+                          padding: '4px 10px',
+                          borderRadius: 40,
+                        }}>
+                          Only {spotsLeft} left
+                        </span>
+                      )}
+                      {isFull && (
+                        <span style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 500,
+                          color: '#6c6c6c',
+                          background: '#f0f0f0',
+                          padding: '4px 10px',
+                          borderRadius: 40,
+                        }}>
+                          Full
+                        </span>
+                      )}
+                    </div>
 
-                <h3 style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: '1.2rem',
-                  marginBottom: 12,
-                  color: 'var(--text)',
-                  lineHeight: 1.3
-                }}>
-                  {getSocialTitle(meetup)}
-                </h3>
+                    <h3 style={{
+                      fontFamily: 'var(--font-display)',
+                      fontSize: '1.3rem',
+                      fontWeight: 500,
+                      marginBottom: 12,
+                      color: '#1a1a1a',
+                      lineHeight: 1.3,
+                    }}>
+                      {meetup.title || meetup.meetingPoint || `${typeInfo.label} in ${meetup.city}`}
+                    </h3>
 
-                {mapCenter && (
-                  <div style={{
-                    marginBottom: 16,
-                    borderRadius: 16,
-                    overflow: 'hidden',
-                    height: '110px',
-                    border: '1px solid var(--coral-border)'
-                  }}>
-                    <MiniMap 
-                      center={mapCenter}
-                      location={meetup.meetingPoint || place || city}
-                      height="110px"
-                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, color: 'var(--text-mid)' }}>
+                      <span style={{ fontSize: 14 }}>📍</span>
+                      <span style={{ fontSize: '0.85rem' }}>{meetup.city}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: 'var(--text-mid)' }}>
+                      <span style={{ fontSize: 14 }}>🕒</span>
+                      <span style={{ fontSize: '0.85rem' }}>{formatDate(meetup.startAt, meetup.timezone)}</span>
+                    </div>
+
+                    {meetup.coordinates?.lat && meetup.coordinates?.lng && (
+                      <div style={{
+                        marginBottom: 16,
+                        borderRadius: 20,
+                        overflow: 'hidden',
+                        height: 100,
+                      }}>
+                        <MiniMap 
+                          center={[meetup.coordinates.lat, meetup.coordinates.lng]}
+                          location={meetup.city}
+                          height="100px"
+                        />
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+                      <div style={{ display: 'flex' }}>
+                        {[...Array(Math.min(3, attendees))].map((_, i) => (
+                          <div key={i} style={{
+                            width: 28, height: 28, borderRadius: '50%',
+                            background: '#e8e5e1', marginLeft: i === 0 ? 0 : -8,
+                            border: '2px solid #fff',
+                            backgroundImage: `url(/faces/face${String.fromCharCode(97 + i)}.png)`,
+                            backgroundSize: 'cover',
+                          }} />
+                        ))}
+                      </div>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-mid)' }}>
+                        {attendees} {attendees === 1 ? 'person' : 'people'} going
+                      </span>
+                    </div>
                   </div>
-                )}
 
-                <p style={{ color: 'var(--text-muted)', marginBottom: 6, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>📍</span> {city}{place ? ` • ${place}` : ''}
-                </p>
-
-                <p style={{ color: 'var(--text-muted)', marginBottom: 8, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>🕒</span> 
-                  {isValidDate
-                    ? meetupDate.toLocaleString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        timeZone: timezone,
-                        timeZoneName: 'short',
-                      })
-                    : 'Date TBD'}
-                </p>
-
-                <p style={{ color: 'var(--text-muted)', marginBottom: 20, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>👥</span> {participants} / {limit} people
-                </p>
-
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  paddingTop: 12,
-                  borderTop: '1px solid var(--coral-border)'
-                }}>
-                  <span style={{
-                    fontSize: '1.1rem',
-                    fontWeight: 700,
-                    color: 'var(--coral)'
+                  <div style={{
+                    padding: '16px 20px',
+                    borderTop: '1px solid #f0ede9',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: '#fff',
                   }}>
-                    ${price}
-                  </span>
-                  <span style={{
-                    background: 'var(--coral)',
-                    color: '#fff',
-                    padding: '8px 20px',
-                    borderRadius: 40,
-                    fontWeight: 600,
-                    fontSize: '0.85rem',
-                    transition: 'all 0.2s',
-                    cursor: 'pointer',
-                    display: 'inline-block'
-                  }}>
-                    {getButtonText()}
-                  </span>
+                    <span style={{
+                      fontSize: '1.2rem',
+                      fontWeight: 600,
+                      color: 'var(--coral)',
+                    }}>
+                      ${meetup.price || 2}
+                    </span>
+                    <span style={{
+                      background: 'transparent',
+                      color: 'var(--coral)',
+                      fontWeight: 500,
+                      fontSize: '0.85rem',
+                      padding: '6px 0',
+                      borderBottom: '1px solid var(--coral-border)',
+                    }}>
+                      Join now →
+                    </span>
+                  </div>
                 </div>
               </Link>
             )
           })}
         </div>
+
+        <div style={{ textAlign: 'center', marginTop: 56 }}>
+          <Link href="/events" style={{
+            color: 'var(--coral)',
+            fontWeight: 500,
+            textDecoration: 'none',
+            borderBottom: '1px solid var(--coral-border)',
+            paddingBottom: 4,
+          }}>
+            See all upcoming nights →
+          </Link>
+        </div>
       </div>
+
+      <style jsx>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </section>
   )
 }
